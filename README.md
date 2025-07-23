@@ -12,7 +12,7 @@
 ## Enable IOMMU
 - `vim /etc/default/grub`
 - to `GRUB_CMDLINE_LINUX_DEFAULT="quiet"` add: intel_iommu=on or amd_iommu=on.
-- `GRUB_CMDLINE_LINUX_DEFAULT="quiet amd_iommu=on idle=nomwait processor.max_cstate=1"`
+- `GRUB_CMDLINE_LINUX_DEFAULT="quiet amd_iommu=on"`
 - `update-grub` 
 - `update-initramfs -u`
 - reboot

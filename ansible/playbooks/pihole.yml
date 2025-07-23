@@ -1,0 +1,40 @@
+---
+- name: Deploy Pi-hole container
+  hosts: debian_vm
+  become: yes
+
+  tasks:
+    - name: Ensure /docker/etc-pihole directory exists
+      file:
+        path: /docker/etc-pihole
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Run Pi-hole container
+      docker_container:
+        name: pihole
+        image: pihole/pihole:latest
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "53:53/tcp"
+          - "53:53/udp"
+          - "80:80/tcp"
+          - "443:443/tcp"
+        env:
+          TZ: "Europe/Berlin"
+          FTLCONF_webserver_api_password: !vault |
+            $ANSIBLE_VAULT;1.1;AES256
+            32366634656262396166366365333930353939396364656535636333613163623761643936653762
+            6362633966613632343364613933366530373133646362370a356364623239666364626634646364
+            62656539646532636434616363653764626234323437373963396633623531306464323430383534
+            3365383063616235630a343738393138376266656165323262316162326662326133343335306563
+            38383865653564323739373738356634303532313135346338313838646634633437616666313064
+            3636626538636531633965393735353265653861313065373031
+          FTLCONF_dns_listeningMode: "all"
+        volumes:
+          - "/docker/etc-pihole:/etc/pihole"
+        capabilities:
+          - SYS_NICE
