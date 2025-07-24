@@ -1,0 +1,6 @@
+---
+- name: Configure Debian LXC and Deploy Services
+  hosts: debian_vm
+  become: true
+  roles:
+    - deb_lxc

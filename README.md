@@ -1,7 +1,18 @@
+# Homelab Project
+
+This repository contains configurations and automation for my homelab setup.
+
 # Structure
 
-- `ansible/`: all configuration logic
-- `docker/`: docker-compose services
+- `ansible/`: Contains all Ansible automation for provisioning and deploying services.
+    - `inventory/`: Hosts
+    - `group_vars/`: 
+        - `all.yml`: Global variables
+    - `roles/`: 
+        - `deb_lxc/`: Role for setting Debian LXC container.
+            - `tasks/`:  
+            - `templates/`:
+    - `playbook.yml`: The main playbook to orchestrate the roles.
 
 # Setup Proxmox
 
@@ -13,7 +24,7 @@
 - `vim /etc/default/grub`
 - to `GRUB_CMDLINE_LINUX_DEFAULT="quiet"` add: intel_iommu=on or amd_iommu=on.
 - `GRUB_CMDLINE_LINUX_DEFAULT="quiet amd_iommu=on"`
-- `update-grub` 
+- `update-grub`
 - `update-initramfs -u`
 - reboot
 - test if IOMMU is enabled
@@ -39,20 +50,41 @@ dmesg | grep -e IOMMU -e AMD-Vi
 
 # Setup with Ansible
 
-## create user
+## Initial User Setup on Debian LXC
 - `apt update && apt upgrade -y`
 - `adduser tim && adduser tim sudo`
+- Add your SSH key to the Debian host for passwordless access.
 
-# setup debian vm
-- add ssh key to debian host
-- `ssh tim@192.168.0.100`
-- setup debian vm: ` ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/setup-deb.yml --ask-become-pass`
+## Running Ansible Playbooks
 
-# mount / backup
+All Ansible automation is run via the `ansible/playbook.yml` file.
+
+Variables and vaulted secrets are managed in `ansible/group_vars/all.yml`.
+
+### Full Setup (Base System + Docker Containers)
+This will run all tasks in the `deb_lxc` role.
+```bash
+ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --ask-become-pass --ask-vault-pass
+```
+
+### Only Base System Setup
+This will run only the tasks related to the base system configuration (packages, users, Docker installation, UFW).
+```bash
+ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --tags "deb_lxc_setup" --ask-become-pass --ask-vault-pass
+```
+
+### Only Docker Container Deployment
+This will run only the tasks related to deploying Docker containers via `docker-compose`.
+```bash
+ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --tags "deb_lxc_deploy_containers" --ask-become-pass --ask-vault-pass
+```
+
+# Mount / Backup
+
 - mount: `sshfs tim@192.168.0.100:/ ~/nas`
 - unmount: `sudo umount ~/nas`
 - backup desktop:
-```
+```bash
 rsync -av --delete --dryrun --info=progress2 \
         --exclude='nas' \
         --exclude='.*' \
@@ -61,3 +93,4 @@ rsync -av --delete --dryrun --info=progress2 \
         --exclude='Downloads' \
         ~/ tim@192.168.0.100:/data/backup/arch_desktop
 ```
+

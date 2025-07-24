@@ -1,0 +1,8 @@
+---
+- name: Import base system setup tasks
+  import_tasks: setup.yml
+  tags: deb_lxc_setup
+
+- name: Import Docker container deployment tasks
+  import_tasks: deploy_containers.yml
+  tags: deb_lxc_deploy_containers
