@@ -24,17 +24,17 @@ Variables and vaulted secrets are managed in `ansible/group_vars/all.yml`.
 ### Full Setup (Base System + Docker Containers)
 This will run all tasks in the `deb_lxc` role.
 ```bash
-ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --ask-become-pass --ask-vault-pass
+ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --ask-become-pass --ask-vault-pass -l debian_lxc
 ```
 
 ### Only Base System Setup
 This will run only the tasks related to the base system configuration (packages, users, Docker installation, UFW).
 ```bash
-ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --tags "deb_lxc_setup" --ask-become-pass --ask-vault-pass
+ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --tags "deb_lxc_setup" --ask-become-pass --ask-vault-pass  -l debian_lxc
 ```
 
 ### Only Docker Container Deployment
 This will run only the tasks related to deploying Docker containers via `docker-compose`.
 ```bash
-ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --tags "deb_lxc_deploy_containers" --ask-become-pass --ask-vault-pass
+ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --tags "deb_lxc_deploy_containers" --ask-become-pass --ask-vault-pass  -l debian_lxc
 ```

@@ -1,0 +1,8 @@
+---
+- name: Import base system setup tasks
+  import_tasks: setup.yml
+  tags: gameserver_setup
+
+- name: Import Docker container deployment tasks
+  import_tasks: deploy_containers.yml
+  tags: gameserver_deploy_containers

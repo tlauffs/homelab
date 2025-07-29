@@ -1,0 +1,37 @@
+- name: Ensure etc-valheim directory exists
+  file:
+    path: "{{ data_directory }}/servers/valheim"
+    state: directory
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0755'
+
+- name: Ensure opt-valheim directory exists
+  file:
+    path: "{{ docker_config_directory }}/opt-valheim"
+    state: directory
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0755'
+
+- name: Upload docker-compose.yml template
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ docker_config_directory }}/docker-compose.yml"
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0644'
+
+- name: Upload valheim.env
+  template:
+    src: valheim.env.j2
+    dest: "{{ docker_config_directory }}/valheim.env"
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0600'
+
+- name: Run docker-compose up
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_config_directory }}"
+    state: present
+    recreate: auto

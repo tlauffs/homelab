@@ -1,6 +1,12 @@
 ---
 - name: Configure Debian LXC and Deploy Services
-  hosts: debian_vm
+  hosts: debian_lxc
   become: true
   roles:
     - deb_lxc
+
+- name: Configure Gameserver VM and Deploy Services
+  hosts: gameserver 
+  become: true
+  roles:
+    - gameserver
