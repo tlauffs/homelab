@@ -36,6 +36,9 @@ PostUp = iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 # valheim port-forward
 PostUp = iptables -t nat -A PREROUTING -i eth0 -p udp --dport 2456:2457 -j DNAT --to-destination 10.100.0.2:2456-2457
 PostUp = iptables -A FORWARD -p udp -d 10.100.0.2 --dport 2456:2457 -j ACCEPT
+# minecraft port-forward
+PostUp = iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 25565 -j DNAT --to-destination 10.100.0.2:25565
+PostUp = iptables -A FORWARD -p tcp -d 10.100.0.2 --dport 25565 -j ACCEPT
 
 PostDown = iptables -D FORWARD -i eth0 -o %i -j ACCEPT
 PostDown = iptables -D FORWARD -i %i -j ACCEPT
@@ -43,6 +46,9 @@ PostDown = iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
 # valheim port-forward
 PostDown = iptables -t nat -D PREROUTING -i eth0 -p udp --dport 2456:2457 -j DNAT --to-destination 10.100.0.2:2456-2457
 PostDown = iptables -D FORWARD -p udp -d 10.100.0.2 --dport 2456:2457 -j ACCEPT
+# minecraft port-forward
+PostDown = iptables -t nat -D PREROUTING -i eth0 -p tcp --dport 25565 -j DNAT --to-destination 10.100.0.2:25565
+PostDown = iptables -D FORWARD -p tcp -d 10.100.0.2 --dport 25565 -j ACCEPT
 
 [Peer]
 ```
@@ -90,14 +96,25 @@ DNS = 8.8.8.8
 PrivateKey = {private-client-key} 
 
 PostUp = iptables -t nat -A POSTROUTING -o %i -j MASQUERADE
+# valheim
 PostUp = iptables -t nat -A PREROUTING -i %i -p udp --dport 2456:2458 -j DNAT --to-destination 192.168.0.223:2456-2458
 PostUp = iptables -A FORWARD -i %i -o ens18 -p udp --dport 2456:2458 -d 192.168.0.223 -j ACCEPT
 PostUp = iptables -t nat -A POSTROUTING -o ens18 -p udp --dport 2456:2458 -d 192.168.0.223 -j MASQUERADE
+# minecraft
+PostUp = iptables -t nat -A PREROUTING -i %i -p tcp --dport 25565 -j DNAT --to-destination 192.168.0.223:25565
+PostUp = iptables -A FORWARD -i %i -o ens18 -p tcp --dport 25565 -d 192.168.0.223 -j ACCEPT
+PostUp = iptables -t nat -A POSTROUTING -o ens18 -p tcp --dport 25565 -d 192.168.0.223 -j MASQUERADE
 
 PostDown = iptables -t nat -D POSTROUTING -o %i -j MASQUERADE
+# valheim
 PostDown = iptables -t nat -D PREROUTING -i %i -p udp --dport 2456:2458 -j DNAT --to-destination 192.168.0.223:2456-2458
 PostDown = iptables -D FORWARD -i %i -o ens18 -p udp --dport 2456:2458 -d 192.168.0.223 -j ACCEPT
 PostDown = iptables -t nat -D POSTROUTING -o ens18 -p udp --dport 2456:2458 -d 192.168.0.223 -j MASQUERADE
+# minecraft
+PostDown = iptables -t nat -D PREROUTING -i %i -p tcp --dport 25565 -j DNAT --to-destination 192.168.0.223:25565
+PostDown = iptables -D FORWARD -i %i -o ens18 -p tcp --dport 25565 -d 192.168.0.223 -j ACCEPT
+PostDown = iptables -t nat -D POSTROUTING -o ens18 -p tcp --dport 25565 -d 192.168.0.223 -j MASQUERADE
+
 
 
 [Peer]

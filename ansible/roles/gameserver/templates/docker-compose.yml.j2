@@ -13,3 +13,27 @@ services:
       - ./valheim.env
     restart: always
     stop_grace_period: 2m
+  mc:
+    image: itzg/minecraft-server:stable
+    tty: true
+    stdin_open: true
+    networks:
+      - my-net
+    ports:
+      - "25565:25565"
+    environment:
+      EULA: "TRUE"
+      TYPE: "FABRIC"
+      VERSION: "1.21.5"
+      MOTD: "Big Cock Minecraft Server"
+      DIFFICULTY: "3"
+      VIEW_DISTANCE: "24"
+    volumes:
+      - "/data/servers/mc:/data"
+    restart: unless-stopped
+
+networks:
+  my-net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1280

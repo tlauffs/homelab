@@ -29,7 +29,7 @@ Variables and vaulted secrets are managed in `ansible/group_vars/all.yml`.
 ### Full Setup (Base System + Docker Containers)
 This will run all tasks in the `gameserver` role.
 ```bash
-ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --ask-become-pass -l gameserver 
+ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --ask-become-pass --ask-vault-pass -l gameserver 
 ```
 
 ### Only Base System Setup
