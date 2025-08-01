@@ -21,14 +21,3 @@ dmesg | grep -e IOMMU -e AMD-Vi
 ## Create Storage
 - disks > ZFS > create: ZFS
 - pick drives and raid level
-
-## Create main Deb VM
-- Download Template: local > CT Templates > Templates > debian
-- Create Container: pve > Create Container
-    - set specs
-    - set Network (ipv4): CIDR: 192.168.0.100/24 and Gateway `ip route | grep default`
-- add nas storage:
-    - vm > resources > add > mount point (500gb)
-- add docker mount point
-    - vm > resources > add > mount point (32gb)
-

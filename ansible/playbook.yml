@@ -1,9 +1,15 @@
 ---
-- name: Configure Debian LXC and Deploy Services
-  hosts: debian_lxc
+- name: Configure Pihole lxc
+  hosts: pihole_lxc
   become: true
   roles:
-    - deb_lxc
+    - pihole_lxc
+
+- name: Configure Storage lxc 
+  hosts: storage_lxc 
+  become: true
+  roles:
+    - storage_lxc 
 
 - name: Configure Gameserver VM and Deploy Services
   hosts: gameserver 

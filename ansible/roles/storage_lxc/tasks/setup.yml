@@ -1,0 +1,62 @@
+---
+- name: Update and upgrade packages
+  apt:
+    update_cache: yes
+    upgrade: dist
+    autoremove: yes
+    autoclean: yes
+
+- name: Create user
+  user:
+    name: "{{ homelab_user }}"
+    groups: sudo
+    append: yes
+    state: present
+    create_home: yes
+
+- name: Autoremove unnecessary packages
+  apt:
+    autoremove: yes
+    autoclean: yes
+
+- name: Ensure export directory exists
+  file:
+    path: "{{ data_directory }}"
+    state: directory
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0755'
+
+- name: Change ownership of data mount
+  file:
+    path: "{{ data_directory }}"
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    recurse: yes
+
+- name: Install rsync
+  apt:
+    name:
+      - rsync
+    state: present
+    update_cache: yes
+
+- name: Install Samba server
+  apt:
+    name: samba
+    state: present
+    update_cache: yes
+
+- name: Deploy Samba config
+  copy:
+    src: ./smb.conf
+    dest: /etc/samba/smb.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Restart Samba service
+  systemd:
+    name: smbd
+    state: restarted
+    enabled: yes

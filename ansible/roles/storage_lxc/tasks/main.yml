@@ -1,0 +1,4 @@
+---
+- name: Import base system setup tasks
+  import_tasks: setup.yml
+  tags: storage_lxc
