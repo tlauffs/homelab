@@ -1,22 +1,14 @@
-- name: Ensure etc-valheim directory exists
+- name: Ensure /data/immich/postgres exists 
   file:
-    path: "{{ data_directory }}/servers/valheim"
+    path: "{{ data_directory }}/immich/postgres"
     state: directory
     owner: "{{ homelab_user }}"
     group: "{{ homelab_user }}"
     mode: '0755'
 
-- name: Ensure opt-valheim directory exists
+- name: Ensure /data/immich/library exists 
   file:
-    path: "{{ docker_config_directory }}/opt-valheim"
-    state: directory
-    owner: "{{ homelab_user }}"
-    group: "{{ homelab_user }}"
-    mode: '0755'
-
-- name: Ensure minecraft data directory exists
-  file:
-    path: "{{ data_directory }}/servers/mc"
+    path: "{{ data_directory }}/immich/library"
     state: directory
     owner: "{{ homelab_user }}"
     group: "{{ homelab_user }}"
@@ -30,13 +22,13 @@
     group: "{{ homelab_user }}"
     mode: '0644'
 
-- name: Upload valheim.env
+- name: Upload .env template
   template:
-    src: valheim.env.j2
-    dest: "{{ docker_config_directory }}/valheim.env"
+    src: .env.j2
+    dest: "{{ docker_config_directory }}/.env"
     owner: "{{ homelab_user }}"
     group: "{{ homelab_user }}"
-    mode: '0600'
+    mode: '0644'
 
 - name: Run docker-compose up
   community.docker.docker_compose_v2:

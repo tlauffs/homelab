@@ -35,3 +35,13 @@ password=...
 - mount: `mount -a`
 - unmount: `sudo umount /home/tim/nas`
 
+# Backup Proxmox vms
+- in pve:
+- create a backup directory in the tank pool: `mkdir -p /tank/vm_backup`
+    - `chown root:root /tank/vm_backup`
+    - `chmod 755 /tank/vm_backup`
+- add as directory to proxmox storage:
+    - Datacenter > Storage > Add > Directory
+        - content: backup
+- auto backups: datacenter > backup > add
+

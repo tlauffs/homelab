@@ -1,0 +1,7 @@
+---
+- import_role:
+    name: setup_lxc
+
+- name: Start nginx proxy manager container
+  import_tasks: deploy_containers.yml
+  tags: nginx_deploy_containers

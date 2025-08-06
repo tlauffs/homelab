@@ -95,6 +95,11 @@
       - docker-compose-plugin
     state: present
 
+- name: Ensure docker group exists
+  group:
+    name: docker
+    state: present
+
 - name: Add user to docker group
   user:
     name: "{{ homelab_user }}"

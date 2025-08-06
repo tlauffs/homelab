@@ -5,6 +5,12 @@
   roles:
     - pihole_lxc
 
+- name: Configure Nginx lxc
+  hosts: nginx_lxc
+  become: true
+  roles:
+    - nginx_lxc
+
 - name: Configure Storage lxc 
   hosts: storage_lxc 
   become: true
@@ -16,3 +22,9 @@
   become: true
   roles:
     - gameserver
+
+- name: Configure Immich lxc 
+  hosts: immich_lxc 
+  become: true
+  roles:
+    - immich_lxc 

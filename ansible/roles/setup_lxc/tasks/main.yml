@@ -28,40 +28,13 @@
     group: "{{ homelab_user }}"
     recurse: yes
 
-- name: Install ufw and rsync
-  apt:
-    name:
-      - ufw
-      - rsync
-    state: present
-    update_cache: yes
-
-- name: Set default deny incoming policy
-  ufw:
-    direction: incoming
-    policy: deny
-
-- name: Set default allow outgoing policy
-  ufw:
-    direction: outgoing
-    policy: allow
-
-- name: Allow SSH with rate limiting on port 22/tcp
-  ufw:
-    rule: limit
-    port: 22
-    proto: tcp
-
-- name: Enable UFW firewall
-  ufw:
-    state: enabled
-
 - name: Install packages to allow apt to use a repository over HTTPS
   apt:
     name:
       - ca-certificates
       - curl
       - gnupg
+      - lsb-release
     state: present
     update_cache: yes
 
@@ -79,7 +52,7 @@
 
 - name: Add Docker apt repository
   apt_repository:
-    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_lsb.codename }} stable"
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_facts['lsb']['codename'] | default('bookworm') }} stable"
     filename: docker
     state: present
 
@@ -95,6 +68,11 @@
       - containerd.io
       - docker-buildx-plugin
       - docker-compose-plugin
+    state: present
+
+- name: Ensure docker group exists
+  group:
+    name: docker
     state: present
 
 - name: Add user to docker group

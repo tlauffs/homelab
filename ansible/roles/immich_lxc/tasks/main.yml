@@ -4,4 +4,4 @@
 
 - name: Import Docker container deployment tasks
   import_tasks: deploy_containers.yml
-  tags: pihole_deploy_containers
+  tags: immich_deploy_containers

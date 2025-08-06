@@ -31,7 +31,7 @@ ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --ask-becom
 ```bash
 ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --ask-become-pass --ask-vault-pass -l {role} --tags {optional tags}
 ```
-- existing roles: pihole_lxc, storage_lxc, gameserver 
+- existing roles: pihole_lxc, storage_lxc, gameserver, nginx_lxc
 
 
 ## Base config of Debian based lxcs/vms:

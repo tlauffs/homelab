@@ -1,11 +1,3 @@
-- name: Ensure directory exists
-  file:
-    path: "{{ docker_config_directory }}/etc-pihole"
-    state: directory
-    owner: "{{ homelab_user }}"
-    group: "{{ homelab_user }}"
-    mode: '0755'
-
 - name: Upload docker-compose.yml template
   template:
     src: docker-compose.yml.j2
