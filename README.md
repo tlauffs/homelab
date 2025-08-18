@@ -47,10 +47,7 @@ ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --ask-becom
 ### Initial User Setup on Debian LXC
 - `apt update && apt upgrade -y`
 - `adduser tim && adduser tim sudo`
-
 - add ssh key: ssh-copy-id tim@{ip a}
-- `apt update && apt upgrade -y`
-- `adduser tim sudo`
 - `sudo vim /etc/ssh/sshd_config`
-- uncomment/add `PasswordAuthentication no`
+    - uncomment/add `PasswordAuthentication no`
 - `sudo systemctl reload sshd`

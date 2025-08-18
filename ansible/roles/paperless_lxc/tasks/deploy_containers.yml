@@ -1,0 +1,45 @@
+- name: Ensure /data/paperless/data exists 
+  file:
+    path: "{{ data_directory }}/paperless/data"
+    state: directory
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0755'
+
+- name: Ensure /data/paperless/media exists 
+  file:
+    path: "{{ data_directory }}/paperless/media"
+    state: directory
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0755'
+
+- name: Upload docker-compose.yml template
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ docker_config_directory }}/docker-compose.yml"
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0644'
+
+- name: Upload .env template
+  template:
+    src: .env.j2
+    dest: "{{ docker_config_directory }}/.env"
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0644'
+
+- name: Upload docker-compose.env template
+  template:
+    src: .env.j2
+    dest: "{{ docker_config_directory }}/docker-compose.env"
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0644'
+
+- name: Run docker-compose up
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_config_directory }}"
+    state: present
+    recreate: auto

@@ -17,6 +17,8 @@ zfs destroy tank/subvol-106-disk-0@immich-backup
 ```
 # photos backup with snapshot at 5 AM on Saturdays
 0 5 * * 6 zfs snapshot tank/subvol-106-disk-0@immich-backup && rclone copy /tank/subvol-106-disk-0/.zfs/snapshot/immich-backup b2crypt:immich-backup --progress && zfs destroy tank/subvol-106-disk-0@immich-backup >> /var/log/immich-backup.log 2>&1
+# document paperless backup 6 AM on Saturdays
+0 6 * * 6 zfs snapshot tank/subvol-107-disk-0@paperless-backup && rclone copy /tank/subvol-107-disk-0/.zfs/snapshot/paperless-backup b2crypt:paperless-backup --progress && zfs destroy tank/subvol-107-disk-0@paperless-backup >> /var/log/paperless-backup.log 2>&1
 ```
 
 ## restore

@@ -28,3 +28,9 @@
   become: true
   roles:
     - immich_lxc 
+
+- name: Configure Paperless lxc 
+  hosts: paperless_lxc 
+  become: true
+  roles:
+    - paperless_lxc 
