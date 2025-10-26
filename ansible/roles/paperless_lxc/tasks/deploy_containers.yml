@@ -43,3 +43,4 @@
     project_src: "{{ docker_config_directory }}"
     state: present
     recreate: auto
+    pull: always

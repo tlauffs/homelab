@@ -1,0 +1,84 @@
+---
+- name: Remove backports repo (not needed)
+  apt_repository:
+    repo: "deb http://deb.debian.org/debian bookworm-backports main contrib non-free"
+    state: absent
+
+- name: Ensure kernel headers and build tools are installed
+  apt:
+    name:
+      - linux-headers-{{ ansible_kernel }}
+      - build-essential
+    state: present
+    update_cache: yes
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Add Nvidia drivers
+  apt:
+    name:
+      - nvidia-driver
+      - firmware-misc-nonfree
+      - ffmpeg
+      - libnvcuvid1
+      - libnvidia-encode1
+    state: present
+    update_cache: yes
+
+- name: Add Nvidia Container Toolkit dependencies
+  apt:
+    name:
+      - curl
+      - gnupg
+    state: present
+    update_cache: yes
+
+- name: Download NVIDIA Container Toolkit GPG key
+  get_url:
+    url: https://nvidia.github.io/libnvidia-container/gpgkey
+    dest: /tmp/nvidia-container-toolkit.gpg
+    mode: '0644'
+
+- name: Convert GPG key to binary format
+  command: gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg /tmp/nvidia-container-toolkit.gpg
+  args:
+    creates: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+- name: Add NVIDIA Container Toolkit repository list
+  get_url:
+    url: "https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list"
+    dest: /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    mode: '0644'
+
+- name: Patch NVIDIA repo to use signed-by key
+  replace:
+    path: /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    regexp: '^deb https://'
+    replace: 'deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://'
+
+- name: Update apt cache after adding NVIDIA repo
+  apt:
+    update_cache: yes
+
+- name: Set NVIDIA Container Toolkit version
+  set_fact:
+    nvidia_container_toolkit_version: "1.18.0-1"
+
+- name: Install specific NVIDIA Container Toolkit version
+  apt:
+    name:
+      - "nvidia-container-toolkit={{ nvidia_container_toolkit_version }}"
+      - "nvidia-container-toolkit-base={{ nvidia_container_toolkit_version }}"
+      - "libnvidia-container-tools={{ nvidia_container_toolkit_version }}"
+      - "libnvidia-container1={{ nvidia_container_toolkit_version }}"
+    state: present
+
+- name: Configure NVIDIA runtime for Docker
+  command: nvidia-ctk runtime configure --runtime=docker
+
+- name: Restart Docker to apply NVIDIA runtime
+  service:
+    name: docker
+    state: restarted

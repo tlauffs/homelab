@@ -23,6 +23,12 @@
   roles:
     - gameserver
 
+- name: Configure Mediaserver VM and Deploy Services
+  hosts: mediaserver
+  become: true
+  roles:
+    - mediaserver
+
 - name: Configure Immich lxc 
   hosts: immich_lxc 
   become: true

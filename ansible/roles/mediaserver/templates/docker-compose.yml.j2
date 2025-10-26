@@ -1,0 +1,25 @@
+services:
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Berlin
+    volumes:
+      - ./config:/config
+      - ./cache:/cache
+      - /data/media:/media
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - 8096:8096        # HTTP web interface
+      - 7359:7359/udp    # Service discovery
+      - 1900:1900/udp    # Client discovery
+    restart: unless-stopped

@@ -14,3 +14,11 @@
     - `sudo mount /dev/sdb /data`
     - `sudo chown -R tim:tim /data`
     - `lsblk`
+
+## Nvida GPU setup
+- add gpu hardware device to proxmox
+- add /etc/apt/sources.list entry for nvidia drivers
+    - eb http://deb.debian.org/debian/ bullseye main contrib non-free
+- sudo apt update
+- run `nvidia-detect`
+- install recommended package

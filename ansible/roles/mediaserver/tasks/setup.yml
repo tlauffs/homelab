@@ -1,4 +1,9 @@
 ---
+- name: Ensure sudo is installed
+  apt:
+    name: sudo
+    state: present
+
 - name: Update and upgrade packages
   apt:
     update_cache: yes
@@ -19,24 +24,41 @@
     path: "{{ data_directory }}"
     owner: "{{ homelab_user }}"
     group: "{{ homelab_user }}"
-    recurse: no 
+    recurse: yes
 
 - name: Change ownership of docker mount
   file:
     path: "{{ docker_config_directory }}"
     owner: "{{ homelab_user }}"
     group: "{{ homelab_user }}"
-    recurse: no
+    recurse: yes
 
-- name: Install packages to allow apt to use a repository over HTTPS
+- name: Install ufw 
   apt:
     name:
-      - ca-certificates
-      - curl
-      - gnupg
-      - lsb-release
+      - ufw
     state: present
     update_cache: yes
+
+- name: Set default deny incoming policy
+  ufw:
+    direction: incoming
+    policy: deny
+
+- name: Set default allow outgoing policy
+  ufw:
+    direction: outgoing
+    policy: allow
+
+- name: Allow SSH with rate limiting on port 22/tcp
+  ufw:
+    rule: limit
+    port: 22
+    proto: tcp
+
+- name: Enable UFW firewall
+  ufw:
+    state: enabled
 
 - name: Create directory for Docker GPG keyrings
   file:
@@ -52,7 +74,7 @@
 
 - name: Add Docker apt repository
   apt_repository:
-    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_facts['lsb']['codename'] | default('bookworm') }} stable"
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_lsb.codename }} stable"
     filename: docker
     state: present
 

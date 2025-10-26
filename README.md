@@ -17,22 +17,14 @@ This repository contains configurations and automation for my homelab setup.
 - [Proxmox Setup](./docs/proxmox_setup.md)
 - [Backup/Storage Setup](docs/storage_backup.md)
 - [WireGuard VPS Tunnel](./docs/wireguard_vps_proxy.md)
-- [Gameserver Setuop](./docs/gameserver_vm.md)
+- [Server Setup (media/game)](./docs/server_vms.md)
 
 ## setup VMs with ansible
-
-
-### Full Setup (all VMs)
-```bash
-ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --ask-become-pass --ask-vault-pass 
-```
-
-### Setup specific VM
+ 
+### Setup VM with roles
 ```bash
 ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml --ask-become-pass --ask-vault-pass -l {role} --tags {optional tags}
 ```
-- existing roles: pihole_lxc, storage_lxc, gameserver, nginx_lxc
-
 
 ## Base config of Debian based lxcs/vms:
 - Download Template: local > CT Templates > Templates > debian

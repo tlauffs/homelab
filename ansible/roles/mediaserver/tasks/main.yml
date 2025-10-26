@@ -1,0 +1,12 @@
+---
+- name: Import base system setup tasks
+  import_tasks: setup.yml
+  tags: mediaserver_setup
+
+- name: Import Nvidia setup tasks
+  import_tasks: nvidia_setup.yml
+  tags: mediaserver_nvidia
+  
+- name: Deploy containers
+  import_tasks: deploy_containers.yml
+  tags: mediaserver_deploy
