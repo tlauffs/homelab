@@ -8,7 +8,7 @@
 - setup debian as ssh server
 - add nas storage vm > hardware > add harddisk
 - add ssh key
-- mount nas storage:
+- mount nas storage (temporary):
     - `sudo mkfs.ext4 /dev/sdb`
     - `sudo mkdir /data`
     - `sudo mount /dev/sdb /data`
@@ -18,7 +18,10 @@
 ## Nvida GPU setup
 - add gpu hardware device to proxmox
 - add /etc/apt/sources.list entry for nvidia drivers
-    - eb http://deb.debian.org/debian/ bullseye main contrib non-free
+    deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+    deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
+    deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
+
 - sudo apt update
 - run `nvidia-detect`
 - install recommended package

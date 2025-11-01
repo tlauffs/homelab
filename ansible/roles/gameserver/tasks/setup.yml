@@ -60,6 +60,15 @@
   ufw:
     state: enabled
 
+- name: Mount NAS disk at /data
+  mount:
+    path: "{{ data_directory }}"
+    src: /dev/sdb
+    fstype: ext4
+    state: mounted
+    opts: defaults
+    boot: true
+
 - name: Set default route to WireGuard client LXC
   ansible.builtin.command: ip route replace default via 192.168.0.102
 

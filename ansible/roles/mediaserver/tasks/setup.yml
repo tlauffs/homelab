@@ -33,32 +33,14 @@
     group: "{{ homelab_user }}"
     recurse: yes
 
-- name: Install ufw 
-  apt:
-    name:
-      - ufw
-    state: present
-    update_cache: yes
-
-- name: Set default deny incoming policy
-  ufw:
-    direction: incoming
-    policy: deny
-
-- name: Set default allow outgoing policy
-  ufw:
-    direction: outgoing
-    policy: allow
-
-- name: Allow SSH with rate limiting on port 22/tcp
-  ufw:
-    rule: limit
-    port: 22
-    proto: tcp
-
-- name: Enable UFW firewall
-  ufw:
-    state: disabled 
+- name: Mount NAS disk at /data
+  mount:
+    path: "{{ data_directory }}"
+    src: /dev/sdb
+    fstype: ext4
+    state: mounted
+    opts: defaults
+    boot: true
 
 - name: Create directory for Docker GPG keyrings
   file:

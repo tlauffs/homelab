@@ -42,8 +42,9 @@ services:
       servarrnetwork:
         ipv4_address: 172.39.0.2
     ports:
-      - 8080:8080 # qbittorrent
+#      - 8080:8080 # qbittorrent
       - 9696:9696 # prowlarr
+      - 6789:6789 # nzbget
     volumes:
       - ./gluetun:/gluetun
     environment:
@@ -53,7 +54,7 @@ services:
       - SERVER_COUNTRIES=Switzerland
       - PORT_FORWARD_ONLY=on
       - VPN_PORT_FORWARDING=on
-      - VPN_PORT_FORWARDING_UP_COMMAND=/bin/sh -c '{% raw %}wget -O- --retry-connrefused --post-data "json={\"listen_port\":{{PORTS}}}" http://127.0.0.1:8080/api/v2/app/setPreferences 2>&1{% endraw %}'
+#      - VPN_PORT_FORWARDING_UP_COMMAND=/bin/sh -c '{% raw %}wget -O- --retry-connrefused --post-data "json={\"listen_port\":{{PORTS}}}" http://127.0.0.1:8080/api/v2/app/setPreferences 2>&1{% endraw %}'
     healthcheck:
       test: ["CMD-SHELL", "ping -c 1 1.1.1.1 || exit 1"]
       interval: 30s
@@ -61,18 +62,33 @@ services:
       retries: 3
     restart: unless-stopped
 
-  qbittorrent:
-    image: linuxserver/qbittorrent
-    container_name: qbittorrent
+#  qbittorrent:
+#    image: linuxserver/qbittorrent
+#    container_name: qbittorrent
+#    network_mode: "service:gluetun"
+#    entrypoint: sh -c "while ! ip link show tun0 >/dev/null 2>&1; do sleep 1; done; /init"
+#    environment:
+#      - PUID=1000
+#      - PGID=1000
+#      - TZ=Europe/Berlin
+#      - WEBUI_PORT=8080
+#    volumes:
+#      - ./qbittorrent:/config
+#      - /data:/data
+#    restart: unless-stopped
+
+  nzbget:
+    image: lscr.io/linuxserver/nzbget:latest
+    container_name: nzbget
     network_mode: "service:gluetun"
     entrypoint: sh -c "while ! ip link show tun0 >/dev/null 2>&1; do sleep 1; done; /init"
     environment:
       - PUID=1000
       - PGID=1000
       - TZ=Europe/Berlin
-      - WEBUI_PORT=8080
     volumes:
-      - ./qbittorrent:/config
+      - /etc/localtime:/etc/localtime:ro
+      - ./nzbget:/config
       - /data:/data
     restart: unless-stopped
 
