@@ -58,7 +58,7 @@
 
 - name: Enable UFW firewall
   ufw:
-    state: enabled
+    state: disabled 
 
 - name: Create directory for Docker GPG keyrings
   file:
