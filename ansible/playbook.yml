@@ -40,3 +40,9 @@
   become: true
   roles:
     - paperless_lxc 
+
+- name: Configure monitoring lxc 
+  hosts: monitoring_lxc
+  become: true
+  roles:
+    - monitoring_lxc

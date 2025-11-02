@@ -18,6 +18,7 @@ This repository contains configurations and automation for my homelab setup.
 - [Backup/Storage Setup](docs/storage_backup.md)
 - [WireGuard VPS Tunnel](./docs/wireguard_vps_proxy.md)
 - [Server Setup (media/game)](./docs/server_vms.md)
+- [Monitoring](./docs/monitoring.md)
 
 ## setup VMs with ansible
  

@@ -1,0 +1,7 @@
+---
+- import_role:
+    name: setup_lxc
+
+- name: Import Docker container deployment tasks
+  import_tasks: deploy_containers.yml
+  tags: montitoring_deploy_containers
