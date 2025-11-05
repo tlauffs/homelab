@@ -1,0 +1,47 @@
+---
+- import_role:
+    name: setup_lxc
+
+- name: Copy config folder
+  copy:
+    src: ../templates/config
+    dest: /docker
+    owner: 1000
+    group: 1000
+    mode: '0755'
+
+- name: Deploy Glance config
+  template:
+    src: ../templates/config/glance.yml.j2
+    dest: /docker/config/glance.yml
+    owner: 1000
+    group: 1000
+    mode: '0644'
+
+- name: Deploy Glance home 
+  template:
+    src: ../templates/config/home.yml.j2
+    dest: /docker/config/home.yml
+    owner: 1000
+    group: 1000
+    mode: '0644'
+
+# - name: Copy assets folder
+#   copy:
+#     src: ../templates/assets
+#     dest: /docker
+#     owner: 1000
+#     group: 1000
+#     mode: '0755'
+
+- name: Copy .env file
+  copy:
+    src: ../templates/.env
+    dest: /docker
+    owner: 1000
+    group: 1000
+    mode: '0755'
+
+- name: Import Docker container deployment tasks
+  import_tasks: deploy_containers.yml
+  tags: glance_deploy_containers

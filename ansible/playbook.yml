@@ -46,3 +46,9 @@
   become: true
   roles:
     - monitoring_lxc
+
+- name: Configure glance lxc 
+  hosts: glance_lxc
+  become: true
+  roles:
+    - glance_lxc
