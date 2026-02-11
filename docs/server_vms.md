@@ -1,6 +1,7 @@
 # Running Servers
 - Valheim IP: valheim.tlauffs.com:2456
 - Minecraft IP: minecraft.tlauffs.com:25565
+- Minecraft IP: minecraft-create.tlauffs.com:25566
 
 ## Create Deb Game Server VM
 - setup linux (deb) vm in proxmox 

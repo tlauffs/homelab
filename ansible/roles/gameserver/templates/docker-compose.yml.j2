@@ -13,6 +13,7 @@ services:
       - ./valheim.env
     restart: always
     stop_grace_period: 2m
+
   mc:
     image: itzg/minecraft-server:stable
     tty: true
@@ -31,6 +32,28 @@ services:
       ENABLE_WHITELIST: "true"
     volumes:
       - "/data/servers/mc:/data"
+    restart: unless-stopped
+
+  mc-astral:
+    image: itzg/minecraft-server:java17
+    tty: true
+    stdin_open: true
+    networks:
+      - my-net
+    ports:
+      - "25566:25565"
+    environment:
+      EULA: "TRUE"
+      TYPE: "FABRIC"
+      MEMORY: "8G"
+      MOTD: "Big Cock Astral Minecraft Server"
+      DIFFICULTY: "3"
+      VIEW_DISTANCE: "16"
+      ENABLE_WHITELIST: "true"
+      VERSION: "1.18.2"
+      FABRIC_LOADER_VERSION: "0.16.3"
+    volumes:
+      - "/data/servers/mc-astral:/data"
     restart: unless-stopped
 
 networks:
