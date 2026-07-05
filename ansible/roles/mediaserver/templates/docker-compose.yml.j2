@@ -47,6 +47,7 @@ services:
       - 6789:6789 # nzbget
     volumes:
       - ./gluetun:/gluetun
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - VPN_SERVICE_PROVIDER=protonvpn
       - VPN_TYPE=wireguard
@@ -55,6 +56,7 @@ services:
       - PORT_FORWARD_ONLY=on
       - VPN_PORT_FORWARDING=on
 #      - VPN_PORT_FORWARDING_UP_COMMAND=/bin/sh -c '{% raw %}wget -O- --retry-connrefused --post-data "json={\"listen_port\":{{PORTS}}}" http://127.0.0.1:8080/api/v2/app/setPreferences 2>&1{% endraw %}'
+      - VPN_UP_COMMAND=/bin/sh -c 'docker restart nzbget prowlarr sonarr radarr'
     healthcheck:
       test: ["CMD-SHELL", "ping -c 1 1.1.1.1 || exit 1"]
       interval: 30s

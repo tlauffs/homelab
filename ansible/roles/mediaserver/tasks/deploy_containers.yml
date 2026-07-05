@@ -69,3 +69,4 @@
     state: present
     recreate: auto
     pull: always
+    remove_orphans: yes
