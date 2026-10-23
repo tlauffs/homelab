@@ -1,6 +1,7 @@
 services:
   valheim:
     image: ghcr.io/lloesche/valheim-server
+    profiles: ["valheim"]
     cap_add:
       - sys_nice
     volumes:
@@ -8,7 +9,7 @@ services:
       - "./opt-valheim:/opt/valheim"
     ports:
       - "2456-2458:2456-2458/udp"
-      - "9001:9001/tcp"
+      - "127.0.0.1:9001:9001"
     env_file:
       - ./valheim.env
     restart: always
@@ -16,6 +17,7 @@ services:
 
   mc:
     image: itzg/minecraft-server:stable
+    profiles: ["mc"]
     tty: true
     stdin_open: true
     networks:
@@ -26,6 +28,7 @@ services:
       EULA: "TRUE"
       TYPE: "FABRIC"
       VERSION: "1.21.11"
+      MEMORY: "2G"
       MOTD: "Big  Server"
       DIFFICULTY: "3"
       VIEW_DISTANCE: "24"
@@ -36,6 +39,7 @@ services:
 
   mc-astral:
     image: itzg/minecraft-server:java17
+    profiles: ["astral"]
     tty: true
     stdin_open: true
     networks:

@@ -17,9 +17,8 @@
   roles:
     - storage_lxc 
 
-- name: Configure Gameserver VM and Deploy Services
-  hosts: gameserver 
-  become: true
+- name: Configure Gameserver VPS and Deploy Services
+  hosts: gameserver_vps
   roles:
     - gameserver
 

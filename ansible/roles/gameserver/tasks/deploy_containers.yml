@@ -104,15 +104,11 @@
     group: 1000
     mode: '0755'
 
-- name: Set default route to WireGuard client LXC
-  ansible.builtin.command: ip route replace default via 192.168.0.1
-
 - name: Run docker-compose up
   community.docker.docker_compose_v2:
     project_src: "{{ docker_config_directory }}"
+    profiles:
+      - "{{ gameserver_profile | default('mc') }}"
     state: present
     recreate: auto
     pull: always
-
-- name: Set default route to WireGuard client LXC
-  ansible.builtin.command: ip route replace default via 192.168.0.102

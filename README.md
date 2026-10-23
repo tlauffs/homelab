@@ -16,9 +16,9 @@ This repository contains configurations and automation for my homelab setup.
 
 - [Proxmox Setup](./docs/proxmox_setup.md)
 - [Backup/Storage Setup](docs/storage_backup.md)
-- [WireGuard VPS Tunnel](./docs/wireguard_vps_proxy.md)
-- [Server Setup (media/game)](./docs/server_vms.md)
+- [Gaming Streaming (gaming VM)](./docs/gaming_streaming.md)
 - [Monitoring](./docs/monitoring.md)
+- [Game Servers (VPS)](docs/gameserver_vps.md)
 
 ## setup VMs with ansible
  

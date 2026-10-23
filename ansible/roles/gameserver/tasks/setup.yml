@@ -22,6 +22,7 @@
 - name: Change ownership of data mount
   file:
     path: "{{ data_directory }}"
+    state: directory
     owner: "{{ homelab_user }}"
     group: "{{ homelab_user }}"
     recurse: yes
@@ -29,6 +30,7 @@
 - name: Change ownership of docker mount
   file:
     path: "{{ docker_config_directory }}"
+    state: directory
     owner: "{{ homelab_user }}"
     group: "{{ homelab_user }}"
     recurse: yes
@@ -59,15 +61,6 @@
 - name: Enable UFW firewall
   ufw:
     state: enabled
-
-- name: Mount NAS disk at /data
-  mount:
-    path: "{{ data_directory }}"
-    src: /dev/sdb
-    fstype: ext4
-    state: mounted
-    opts: defaults
-    boot: true
 
 - name: Create directory for Docker GPG keyrings
   file:
