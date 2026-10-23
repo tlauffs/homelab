@@ -37,29 +37,6 @@ services:
       - "/data/servers/mc:/data"
     restart: unless-stopped
 
-  mc-astral:
-    image: itzg/minecraft-server:java17
-    profiles: ["astral"]
-    tty: true
-    stdin_open: true
-    networks:
-      - my-net
-    ports:
-      - "25566:25565"
-    environment:
-      EULA: "TRUE"
-      TYPE: "FABRIC"
-      MEMORY: "8G"
-      MOTD: "Astral Server"
-      DIFFICULTY: "3"
-      VIEW_DISTANCE: "16"
-      ENABLE_WHITELIST: "true"
-      VERSION: "1.18.2"
-      FABRIC_LOADER_VERSION: "0.16.3"
-    volumes:
-      - "/data/servers/mc-astral:/data"
-    restart: unless-stopped
-
 networks:
   my-net:
     driver: bridge

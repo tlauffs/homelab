@@ -4,7 +4,6 @@ Valheim and Minecraft run on a Hetzner VPS, not in the homelab.
 
 - `valheim.tlauffs.com`
 - `minecraft.tlauffs.com`
-- `minecraft-create.tlauffs.com` — shelved
 
 ## Deploy
 
@@ -16,7 +15,7 @@ ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml \
 ## Profiles
 
 The VPS is small, so only one server runs at a time. Each service is behind a
-Docker profile: `mc`, `valheim`, `astral`.
+Docker profile: `mc` or `valheim`.
 
 ```bash
 cd /docker
@@ -25,9 +24,6 @@ docker compose --profile mc up -d
 
 Set `gameserver_profile` in the inventory to match. Stop the running one before
 starting another.
-
-`astral` is shelved — the world files are on disk, the service just never
-starts.
 
 ## Backups
 

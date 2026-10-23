@@ -8,6 +8,3 @@
 
 # Local overrides
 *.local
-
-# Large modpack archives (kept on disk, not in git)
-ansible/roles/gameserver/files/*.zip
