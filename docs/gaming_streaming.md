@@ -3,148 +3,271 @@
 Stream Steam games and a retro library from a headless CachyOS VM on Proxmox to a
 CachyOS thin-client mini PC in the living room, using Sunshine + Moonlight.
 
+## Decisions
+
+- Dedicated CachyOS gaming VM. The NVIDIA GPU moves from the mediaserver VM.
+- Jellyfin on the mediaserver falls back to CPU transcode. Target 1080p; 4K is
+  direct-play only unless a second GPU is added later.
+- Stream target is 1080p60 to start, using an HDMI dummy plug.
+- The client boots into Moonlight. Steam Big Picture and EmulationStation are
+  Sunshine apps; Jellyfin runs natively on the client.
+- X11 session first. Wayland only if X11 causes problems.
+- Plain `steam -gamepadui`; gamescope is a fallback, not the default.
+- Ansible manages packages and config files. Proxmox setup, OS install, Steam
+  login, and first-run app setup stay manual in this doc.
+- Hostname `gaming`, IP `192.168.0.108` (confirm it is free).
+
+## Status
+
+Planned. There is no `gaming` role, inventory group, or playbook entry yet.
+
 ## Architecture
 
 ```
-Proxmox host (headless once GPU moved)
-  └── mediaserver VM (192.168.0.16)  — GPU removed, stays headless (jellyfin → CPU transcode)
-  └── gaming VM (new, CachyOS)       — NVIDIA GPU via VFIO passthrough
+Proxmox host (headless; GPU already passed through to a VM)
+  └── mediaserver VM (192.168.0.16) — GPU removed, Jellyfin on CPU transcode
+  └── gaming VM (192.168.0.108, CachyOS) — NVIDIA GPU via VFIO
         ├── Sunshine (host) + NVIDIA NVENC encode
-        ├── Steam + Big Picture via gamescope
-        ├── EmulationStation-DE + RetroArch (retro frontend)
-        ├── Jellyfin web app entry (192.168.0.16:8096)
-        └── KDE Plasma (autologin, the streamed desktop shell)
-              └── HDMI dummy plug on GPU  (or NVIDIA EDID virtual display)
+        ├── KDE Plasma (autologin, X11 first, the streamed desktop)
+        ├── Steam Big Picture (`steam -gamepadui`)
+        ├── EmulationStation-DE + RetroArch
+        └── HDMI dummy plug (1080p60)
 
-Client (CachyOS mini PC, living room)
-  └── Moonlight (autostart) → streams gaming VM; app grid = [Steam BPM, EmulationStation, Jellyfin]
+Client (CachyOS mini PC, wired Ethernet)
+  ├── Moonlight (autostart) → gaming VM
+  │     └── app grid = [Steam Big Picture, EmulationStation, Desktop]
+  └── Jellyfin client → http://192.168.0.16:8096 (native, not streamed)
 ```
 
 Notes:
-- The client boots straight into Moonlight — that is the simple home/TV UI. Steam
-  Big Picture is exposed as one of the backend's "apps".
-- Alternative client shell: native Steam BPM on the client with a Moonlight
-  non-Steam shortcut. Less unified; not recommended.
 
-## Phase 1 — Proxmox host prep (one-time, before GPU move)
+- Moonlight is the simple home/TV UI. No kiosk browser on the gaming VM.
+- Jellyfin is not a Sunshine app. Playing it natively avoids a second encode.
+- The Proxmox host has a single GPU, so it is headless and managed via web UI
+  or SSH.
 
-1. Confirm GPU IDs and IOMMU group:
-   ```bash
-   lspci -nnk | grep -i nvidia
-   for g in /sys/kernel/iommu_groups/*; do echo "== $g =="; ls $g/devices/; done
-   ```
-   Verify the GPU (and its audio device) sit in their own IOMMU group.
-2. Remove the GPU PCI device from the mediaserver VM:
-   - Web UI → mediaserver VM → Hardware → remove `hostpci0`.
-   - Jellyfin loses HW transcode; keep it running via CPU (or split later).
-3. Host kernel config (IOMMU already enabled, `amd_iommu=on` in
-   `/etc/default/grub`):
-   - `/etc/modules`: add `vfio`, `vfio_iommu_type1`, `vfio_pci`.
-   - `/etc/modprobe.d/blacklist.conf`: `blacklist nouveau`, `blacklist nvidia`,
-     `blacklist nvidiafb`.
-   - `/etc/modprobe.d/vfio.conf`:
-     `options vfio-pci ids=10de:XXXX,10de:XXXX` (GPU + audio IDs from step 1).
-4. Reboot host. Verify: `lspci -k | grep -A2 VGA` → kernel driver in use:
-   `vfio-pci`.
-5. Host has a single GPU → Proxmox goes fully headless once passed through.
-   Manage via web UI / SSH as before.
+## Phase 1 — Proxmox host prep
+
+The GPU is currently passed through to the mediaserver, so vfio should already
+be configured. Verify before changing anything:
+
+```bash
+lspci -nnk | grep -iA3 -E 'vga|3d|nvidia'
+for g in /sys/kernel/iommu_groups/*; do echo "== $g =="; ls $g/devices/; done
+qm config <mediaserver-vmid> | grep hostpci
+```
+
+Confirm the GPU and its audio device are both in `hostpci0` and in the same
+IOMMU group.
+
+1. Shut down the mediaserver VM and the gaming VM.
+2. Remove `hostpci0` from the mediaserver VM (web UI → Hardware → remove).
+3. Add the GPU to the gaming VM: **Primary GPU**, **ROM-Bar**,
+   **PCI-Express**.
+4. Start the gaming VM. A host reboot is normally not needed.
+
+If vfio is not already bound to the GPU, do the full host setup:
+
+- `/etc/modules`: add `vfio`, `vfio_iommu_type1`, `vfio_pci`.
+- `/etc/modprobe.d/blacklist.conf`: `blacklist nouveau`, `blacklist nvidia`,
+  `blacklist nvidiafb`.
+- `/etc/modprobe.d/vfio.conf`:
+  `options vfio-pci ids=10de:XXXX,10de:YYYY` (GPU + audio IDs).
+- `update-initramfs -u`, reboot, then verify with
+  `lspci -k | grep -A2 VGA` → kernel driver in use: `vfio-pci`.
 
 ## Phase 2 — Create the CachyOS VM
 
 1. Download the CachyOS ISO.
-2. Create VM with:
+2. Create the VM:
    - Machine: **q35**
-   - BIOS: **OVMF (UEFI)**, add TPM 2.0
+   - BIOS: **OVMF (UEFI)**. No TPM needed for Linux.
    - CPU: type **host**, 6+ cores
-   - Memory: 16 GB+, **disable Ballooning**
-   - Network: VirtIO, bridge vmbr0
-   - Display: **std VGA** (for install/VNC before GPU takeover)
-   - Disks: OS disk + second SSD/NVMe-emulated disk for the Steam library
-3. Install CachyOS (KDE Plasma). Then:
+   - Memory: 16 GB+, **disable ballooning**
+   - Network: VirtIO, bridge `vmbr0`, IP `192.168.0.108/24`
+   - Display: **std VGA** for install
+   - Disks: OS disk + a **local** disk for the Steam library
+   - Options: **Start at boot** (`onboot=1`)
+3. Install CachyOS (KDE Plasma):
+   - Select the NVIDIA driver option in the installer.
+   - Keep Secure Boot off.
    - Enable SSH (`sudo systemctl enable --now sshd`).
-   - Enable auto-login for `tim` and disable screen/display sleep (Sunshine needs
-     a logged-in user session).
-   - Add SSH key: `ssh-copy-id tim@<gaming-ip>`.
-4. Shut down VM, add passthrough GPU:
-   - Web UI → VM → Hardware → Add → PCI Device → NVIDIA GPU.
-   - Enable **Primary GPU**, **ROM-Bar**, **PCI-Express**.
-   - `--vga none` (VNC will stop working; access via SSH / Moonlight after this).
+   - Enable autologin for `tim` and disable screen lock/display sleep.
+   - Add the SSH key: `ssh-copy-id tim@192.168.0.108`.
+4. Shut down, add the GPU (see Phase 1), set display to `none`.
+   - VNC stops working after this; use SSH or Moonlight.
+5. Boot and verify:
 
-## Phase 3 — Gaming VM software (CachyOS)
+   ```bash
+   nvidia-smi
+   ```
 
-Install via pacman / AUR (`yay`):
+## Phase 3 — Gaming VM software
 
-- NVIDIA driver (current on CachyOS): `nvidia-dkms` handled by CachyOS defaults.
-- Sunshine: `yay -S sunshine` (AUR). Configure:
-  ```ini
-  ~/.config/sunshine/sunshine.conf
-  encoder = nvenc
-  ```
-  - Virtual input udev rule +
-    `echo 'KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"' > /etc/udev/rules.d/85-sunshine-input.rules`
-  - `sudo setcap cap_sys_admin+p $(readlink -f $(which sunshine))`
-  - Enable user service: `systemctl --user enable --now sunshine`
-- Steam + gamescope:
-  - `sudo pacman -S steam gamescope`
-  - Sunshine app entry: `gamescope -- steam -bigpicture`
-  - Fallback if gamescope+NVIDIA misbehaves: plain `steam -bigpicture` on KDE.
-- RetroArch + EmulationStation-DE:
-  - `yay -S retroarch emulationstation-de`
-  - Install cores: snes9x, mupen64plus, gba/mgba, genesis_plus_gx, etc.
-  - ES-DE auto-detects RetroArch; add a Sunshine app entry for ES-DE.
-- Jellyfin app entry in Sunshine apps.json: open `http://192.168.0.16:8096` in a
-  kiosk browser (e.g. firefox-kde).
-- Firewall (ufw, if enabled):
-  ```
-  sudo ufw allow 47984/tcp
-  sudo ufw allow 47989/tcp
-  sudo ufw allow 47990/tcp
-  sudo ufw allow 48010/tcp
-  sudo ufw allow 47998/udp
-  sudo ufw allow 47999/udp
-  sudo ufw allow 48000/udp
-  sudo ufw allow 48002/udp
-  sudo ufw allow 48010/udp
-  ```
-- PipeWire audio + persistent null sink so game audio only goes to the stream.
-- ROMs storage: mount NAS share via fstab
-  (`//192.168.0.104/data` from the storage LXC) at `/mnt/nas/roms` using the
-  samba credentials pattern from `docs/storage_backup.md`.
+### Manual first run
 
-## Phase 4 — Virtual display (headless NVIDIA, no monitor)
+- Log into Steam, enable Big Picture, and add the game disk as a library folder.
+- Run EmulationStation-DE once and point it at the ROM directory.
+- Open the Sunshine web UI (`https://192.168.0.108:47990`), set credentials,
+  and pair Moonlight.
 
-Without any display the GPU framebuffer is inactive and Sunshine streams black.
+### Ansible-managed
 
-- Option A (recommended): **HDMI/DP dummy plug** on the GPU — fixed resolution
-  (1080p60 / 4K60 EDID), simple and reliable.
-- Option B (no hardware): **NVIDIA EDID virtual display** — kernel params
-  `drm.edid_firmware=<conn>:edid/<file> video=<conn>:e` with a custom EDID from
-  initramfs. Works 1080p/1440p/4K, but no HDR; modes fixed until reboot.
+Packages (pacman / AUR via `paru`):
 
-Start with Option A.
+- `steam`
+- `retroarch` plus cores (snes9x, mupen64plus, mgba, genesis_plus_gx, …)
+- `emulationstation-de`
+- `sunshine`
+- `cifs-utils` only if ROMs stay on the NAS
 
-## Phase 5 — Homelab automation (repo)
+NVIDIA is installed by the CachyOS installer. The role only verifies
+`nvidia-smi`; it does not manage DKMS.
 
-- New `ansible/roles/gaming/` — pacman-based role (first Arch-role):
-  install packages, configure Sunshine + app entries, gamescope Steam launcher,
-  PipeWire sink, fstab NAS mount, autologin, systemd user services.
-- Add `[gaming]` group to `ansible/inventory/hosts.ini` (IP e.g. 192.168.0.2xx).
-- Playbook entry: `hosts: gaming` → role `gaming`.
-- This doc doubles as the manual Proxmox-side setup reference (Phases 1–2).
+Sunshine config (`~/.config/sunshine/sunshine.conf`):
+
+```ini
+encoder = nvenc
+```
+
+Sunshine setup:
+
+```bash
+echo 'KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"' \
+  | sudo tee /etc/udev/rules.d/85-sunshine-input.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+sudo setcap cap_sys_admin+p "$(readlink -f "$(command -v sunshine)")"
+systemctl --user enable --now sunshine
+```
+
+Note: `setcap` is lost when the Sunshine package updates. The role reapplies it.
+
+Steam:
+
+- Default app command: `steam -gamepadui`
+- Fallback if the stream is black or scaled wrong: try `gamescope -- steam -gamepadui`
+- Do not add gamescope until it is actually needed.
+
+EmulationStation-DE:
+
+- Add a Sunshine app entry that launches `emulationstation`.
+- RetroArch is detected automatically.
+
+Audio:
+
+- Create a persistent PipeWire null sink and select its monitor as the Sunshine
+  audio sink. This keeps game audio in the stream and off any physical output.
+- Verify audio in Moonlight before adding more apps.
+
+ROMs:
+
+- Prefer a local copy on the game disk. ES-DE scans faster and the stream does
+  not depend on the NAS.
+- If space is tight, mount the NAS share from `docs/storage_backup.md` at
+  `/mnt/nas/roms` and point ES-DE there.
+
+Firewall (only if ufw is enabled):
+
+```bash
+sudo ufw allow 47984/tcp
+sudo ufw allow 47989/tcp
+sudo ufw allow 47990/tcp
+sudo ufw allow 48010/tcp
+sudo ufw allow 47998/udp
+sudo ufw allow 47999/udp
+sudo ufw allow 48000/udp
+sudo ufw allow 48002/udp
+sudo ufw allow 48010/udp
+```
+
+## Phase 4 — Virtual display
+
+Without a display the GPU framebuffer is inactive and Sunshine streams black.
+
+- **Use an HDMI dummy plug at 1080p60.** Simple and reliable.
+- EDID virtual display is a later option if the plug is not enough. It needs
+  kernel params and a custom EDID, and modes are fixed until reboot.
+
+## Phase 5 — Ansible
+
+Add:
+
+```
+ansible/roles/gaming/
+  tasks/main.yml       # imports setup.yml + sunshine.yml with tags
+  tasks/setup.yml      # packages, nvidia check, directories
+  tasks/sunshine.yml   # config, udev rule, setcap, user service
+  templates/sunshine.conf.j2
+  templates/apps.json.j2
+```
+
+Inventory:
+
+```ini
+[gaming]
+192.168.0.108 ansible_user=tim ansible_become=true
+```
+
+Playbook:
+
+```yaml
+- name: Configure gaming VM
+  hosts: gaming
+  become: true
+  roles:
+    - gaming
+```
+
+Tags: `gaming_setup`, `gaming_sunshine`.
+
+In the same change that moves the GPU, remove the NVIDIA tasks and the Jellyfin
+`runtime: nvidia` from the mediaserver role. Do not remove them before the move,
+or the current mediaserver breaks.
 
 ## Phase 6 — Client (CachyOS mini PC)
 
-- Install **Moonlight**.
-- Add the gaming VM by LAN IP, pair with the PIN from
-  `https://<gaming-vm>:47990`.
-- List apps: Steam Big Picture, EmulationStation, Jellyfin, Desktop.
-- Enable fullscreen autostart of Moonlight on boot.
+- Install **Moonlight** and pair it with the gaming VM using the PIN from
+  `https://192.168.0.108:47990`.
+- Apps: Steam Big Picture, EmulationStation, Desktop.
+- Install a native Jellyfin client (Jellyfin Media Player or a browser) and
+  point it at `http://192.168.0.16:8096`.
+- Autostart Moonlight fullscreen on boot.
+- Use wired Ethernet. Wi-Fi is the usual cause of stutter and input lag.
 
-## Open items before/while executing
+## Rollback
 
-- Exact GPU model (RTX 2xxx+ assumed) — needed for driver/EDID details.
-- Dummy plug vs EDID virtual display (recommend dummy plug first).
-- Client shell: Moonlight-as-home-UI (recommended) vs native Steam BPM.
+If the gaming VM does not work out:
+
+1. Shut down the gaming VM.
+2. Remove its `hostpci0`.
+3. Add the GPU back to the mediaserver VM.
+4. Restore the NVIDIA tasks and Jellyfin `runtime: nvidia` in the mediaserver
+   role, or re-run the previous commit.
+5. Start the mediaserver and verify `nvidia-smi` and Jellyfin hardware
+   transcoding.
+
+## Acceptance checklist
+
+- [ ] `nvidia-smi` works in the gaming VM
+- [ ] Sunshine UI reachable at `https://192.168.0.108:47990`
+- [ ] Moonlight pairs successfully
+- [ ] Steam Big Picture streams at 1080p60
+- [ ] Audio plays in the stream
+- [ ] Controller input works
+- [ ] EmulationStation launches and finds ROMs
+- [ ] Jellyfin plays natively on the client
+- [ ] Jellyfin on the mediaserver transcodes 1080p on CPU
+- [ ] Gaming VM starts automatically after a host reboot
+
+## Open items
+
+- Confirm the GPU model and IOMMU group.
+- Confirm `192.168.0.108` is free.
+- Decide the Steam library disk size.
+- Decide whether ROMs are local or on the NAS.
+- Confirm the client machine (`.204`?) and that it is wired.
+- Accept that 4K Jellyfin transcodes are out of scope for now.
 
 ## Ports (reference)
 
