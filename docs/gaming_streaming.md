@@ -22,7 +22,22 @@ living-room mini PC, using Sunshine + Moonlight.
 
 ## Status
 
-Planned. There is no `gaming` role, inventory group, or playbook entry yet.
+VM 200 is built manually through Phase 2. The Ansible role and Sunshine setup
+are not done yet.
+
+## Build log
+
+- [x] Create VM 200 (`gaming`)
+- [x] Install CachyOS
+- [x] SSH, autologin, X11 session
+- [x] Disable sleep/lock
+- [x] Guest agent
+- [x] Mount the 500 GB game disk
+- [ ] GPU passthrough
+- [ ] NVIDIA driver
+- [ ] Sunshine
+- [ ] Steam / EmulationStation
+- [ ] Client (Moonlight + Jellyfin)
 
 ## Architecture
 
@@ -136,13 +151,6 @@ The Proxmox host is `192.168.0.204`. `local-lvm` is the 1 TB NVMe; `tank` is a
    detect the RTX 2070 yet, so do not select an NVIDIA option.
    - Keep Secure Boot off.
    - Install to the 80 GB disk. Leave the 500 GB disk alone for now.
-   - Enable SSH (`sudo systemctl enable --now sshd`).
-   - Set the static IP with `nmcli` or a DHCP reservation.
-   - Enable autologin for `tim`, pick the **Plasma (X11)** session, and disable
-     screen lock/display sleep.
-   - Add the SSH key: `ssh-copy-id tim@192.168.0.79`.
-   - Install the guest agent: `sudo pacman -S --needed qemu-guest-agent` and
-     `sudo systemctl enable --now qemu-guest-agent`.
 4. Remove the ISO and boot from disk:
 
    ```bash
@@ -150,10 +158,63 @@ The Proxmox host is `192.168.0.204`. `local-lvm` is the 1 TB NVMe; `tank` is a
    qm set 200 --boot order=scsi0
    ```
 
-5. Shut down, add the GPU (see Phase 1), set display to `none`:
+5. First boot baseline. These are manual on the first build; the Ansible role
+   will own the repeatable parts.
+   - Pin the IP: reserve MAC `BC:24:11:5E:C6:0D` → `192.168.0.79` on the
+     router, or set `.79` statically in CachyOS.
+   - Enable SSH and allow it through ufw:
+
+     ```bash
+     sudo systemctl enable --now sshd
+     sudo ufw allow 22/tcp
+     ```
+
+   - Add your SSH key: `ssh-copy-id tim@192.168.0.79`.
+   - Autologin + X11:
+
+     ```bash
+     ls /usr/share/xsessions/
+     sudo mkdir -p /etc/sddm.conf.d
+     sudo tee /etc/sddm.conf.d/autologin.conf >/dev/null <<'EOF'
+     [Autologin]
+     User=tim
+     Session=plasmax11.desktop
+     EOF
+     ```
+
+     Reboot and verify `echo $XDG_SESSION_TYPE` prints `x11`.
+   - Disable sleep/lock in KDE: **Power Management** and **Screen Locking**.
+   - Guest agent:
+
+     ```bash
+     sudo pacman -S --needed qemu-guest-agent
+     sudo systemctl enable --now qemu-guest-agent
+     ```
+
+     Verify from Proxmox: `qm agent 200 ping`.
+   - Game disk (confirm the device first):
+
+     ```bash
+     lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT
+     sudo mkfs.ext4 /dev/sdb
+     sudo mkdir -p /mnt/games
+     sudo mount /dev/sdb /mnt/games
+     sudo blkid /dev/sdb
+     ```
+
+     Add the UUID to `/etc/fstab`, then:
+
+     ```bash
+     sudo systemctl daemon-reload
+     sudo mount -a
+     sudo chown tim:tim /mnt/games
+     mkdir -p /mnt/games/SteamLibrary
+     ```
+
+6. Shut down, add the GPU (see Phase 1), set display to `none`:
    `qm set 200 --vga none`
    - VNC stops working after this; use SSH.
-6. Boot, then install the NVIDIA driver with CachyOS hardware detection:
+7. Boot, then install the NVIDIA driver with CachyOS hardware detection:
 
    ```bash
    sudo chwd -a
@@ -259,12 +320,26 @@ Add:
 
 ```
 ansible/roles/gaming/
-  tasks/main.yml       # imports setup.yml + sunshine.yml with tags
+  tasks/main.yml       # imports setup.yml + config.yml + sunshine.yml
   tasks/setup.yml      # packages, nvidia check, directories
+  tasks/config.yml     # autologin, ufw, guest agent, game disk mount
   tasks/sunshine.yml   # config, udev rule, setcap, user service
+  templates/autologin.conf.j2
   templates/sunshine.conf.j2
   templates/apps.json.j2
 ```
+
+What stays manual vs what the role owns:
+
+| Task | Where |
+| --- | --- |
+| Proxmox VM creation, GPU passthrough | manual, this doc |
+| CachyOS install, disk formatting, Steam login | manual |
+| Packages, guest agent, autologin, ufw, fstab mount | Ansible |
+| Sunshine config, app entries, PipeWire sink | Ansible |
+| Moonlight pairing, ES-DE first run | manual |
+
+The role should mount the game disk by UUID. Formatting it stays manual.
 
 Inventory:
 
@@ -283,7 +358,7 @@ Playbook:
     - gaming
 ```
 
-Tags: `gaming_setup`, `gaming_sunshine`.
+Tags: `gaming_setup`, `gaming_config`, `gaming_sunshine`.
 
 In the same change that moves the GPU, remove the NVIDIA tasks and the Jellyfin
 `runtime: nvidia` from the mediaserver role. Do not remove them before the move,
