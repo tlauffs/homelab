@@ -40,7 +40,8 @@ Proxmox host 192.168.0.204 (headless, single GPU)
 
 Client (living-room mini PC, wired Ethernet)
   ├── Moonlight → gaming VM
-  └── Jellyfin → http://192.168.0.16:8096
+  ├── Jellyfin Media Player → https://jellyfin.tlauffs.com
+  └── Jellyseerr (browser) → https://jellyseerr.tlauffs.com
 ```
 
 Jellyfin is not a Sunshine app; playing it natively avoids a second encode.
@@ -128,6 +129,40 @@ administer the VM over SSH.
 For a one-off fix, shut down the VM,
 temporarily `qm set 200 --vga std`, start it, and remove it again afterwards.
 
+#### Local keyboard and mouse
+
+`vga none` removes the console, but the physical USB keyboard and mouse still
+belong to the Proxmox host. The monitor is on the passed-through GPU, so the
+host cannot show you where the pointer is. Use one of these:
+
+1. **Moonlight from a laptop or phone** (no hardware changes). Pair Moonlight
+   with Sunshine, using the PIN from `https://192.168.0.79:47990`, and launch
+   the **Desktop** app. The client's mouse and keyboard then control the VM.
+   This also tests the same path the living-room client will use.
+2. **USB passthrough** (physical mouse and keyboard at the VM monitor). On the
+   Proxmox host, identify the device and attach it to VM 200:
+
+   ```bash
+   lsusb
+   # Example: ID 046d:c52b Logitech Unifying Receiver
+   qm set 200 -usb0 host=046d:c52b
+   qm reboot 200
+   ```
+
+   Pass the USB receiver for a wireless keyboard/mouse combo; both devices then
+   work in the VM. Use `-usb1` for a second device. If several identical
+   receivers are present, use the bus-port form from `lsusb -t`, for example
+   `host=1-2`. Remove it later with:
+
+   ```bash
+   qm set 200 --delete usb0
+   qm reboot 200
+   ```
+
+   The host loses that keyboard/mouse while it is passed through, but SSH still
+   works. If you need to share them, use a USB switch or pass through a
+   dedicated USB controller.
+
 ### Sunshine web UI via NPM — done
 
 NPM provides HTTPS for the web UI only; Moonlight still connects directly to the
@@ -167,6 +202,18 @@ are account logins and physical setup:
 - Run EmulationStation-DE once and point it at the ROM directory. Its Sunshine
   app entry is already managed by the role; after a reboot it appears in
   Moonlight as **EmulationStation**.
+- After the ROM directories exist, open **Main Menu → Alternative Emulators**
+  and select the installed emulator per system:
+  - NES → **Nestopia UE**
+  - PlayStation → **Beetle PSX HW** (the software **Beetle PSX** is also
+    installed as a fallback)
+  - PlayStation 2 → **PCSX2 (Standalone)**
+  - GameCube and Wii → **Dolphin (Standalone)**
+  - PSP → **PPSSPP (Standalone)**
+
+  ES-DE defaults to the first command in its system list, which is often a
+  RetroArch core that is not installed. Setting the alternative emulator once
+  avoids launch failures.
 
 ## Ansible
 
@@ -197,18 +244,19 @@ the autologin file to the matching config directory.
 | --- | --- |
 | Packages, guest agent, autologin (Wayland) | Proxmox VM and GPU passthrough |
 | ufw, disk format, fstab mount by UUID | CachyOS install |
-| Sunshine native package, capability, config, app entries, autostart, ES-DE AppImage | Steam login, ES-DE first run, Sunshine credentials/pairing, NPM proxy |
+| Sunshine native package, capability, config, app entries, autostart, ES-DE AppImage | Steam login, ES-DE first run, BIOS/ROMs, Sunshine credentials/pairing, NPM proxy |
 
 `setup.yml` formats `/dev/sdb` only if it has no filesystem yet, then mounts it
 by UUID at `/mnt/games`. An existing filesystem with data is never overwritten.
 
 Packages from the official repos: `steam`, `retroarch` plus cores
 (`libretro-snes9x`, `libretro-mupen64plus-next`, `libretro-mgba`,
-`libretro-genesis-plus-gx`), `qemu-guest-agent`, `fuse2`, and `cifs-utils` only
-if ROMs stay on the NAS. The role verifies `nvidia-smi` but does not manage
-DKMS.
+`libretro-genesis-plus-gx`, `libretro-nestopia`, `libretro-beetle-psx`,
+`libretro-beetle-psx-hw`), `dolphin-emu`, `ppsspp`, `flatpak`,
+`qemu-guest-agent`, `fuse2`, and `cifs-utils` only if ROMs stay on the NAS. The
+role verifies `nvidia-smi` but does not manage DKMS.
 
-Sunshine and EmulationStation-DE are not in the official Arch repos. Use
+Sunshine, EmulationStation-DE, and PCSX2 are not in the official Arch repos. Use
 upstream packages instead of the AUR:
 
 - Sunshine: the native package from LizardByte's pacman repo. The role adds the
@@ -218,10 +266,22 @@ upstream packages instead of the AUR:
   an interactive consent dialog that a headless VM can't answer.
 - EmulationStation-DE: the upstream Linux x86_64 AppImage from `es-de.org`,
   installed as `es-de`.
+- PCSX2: the official Flathub Flatpak (`net.pcsx2.PCSX2`). ES-DE detects it
+  automatically; no Sunshine app entry is needed.
+
+PS1 and PS2 need BIOS files, and PSP firmware is optional. Put the PS1 BIOS in
+`~/.config/retroarch/system`; PCSX2's Flatpak config and BIOS directory is
+`~/.var/app/net.pcsx2.PCSX2/config/PCSX2`. GameCube/Wii games run through
+Dolphin; some Wii games need the Wii system menu. BIOS, ROMs, and controller
+mappings stay manual.
 
 The role installs Sunshine and starts it at login. Sunshine uses KMS capture and
 auto-detects NVENC on the passed-through card. Ports 47984, 47989, 47990,
 48010/tcp and 47998–48000, 48002, 48010/udp are opened when ufw is active.
+
+Only EmulationStation is exposed as a Sunshine app; standalone emulators are
+launched by ES-DE. Add only the systems you actually use, otherwise the
+controller/BIOS setup becomes a maintenance project.
 
 The role also manages `apps.json` with Desktop, Steam Big Picture, and
 EmulationStation. Low Res Desktop is omitted because its `xrandr` prep command
@@ -256,12 +316,23 @@ git history if you need to roll back.
 - Install **Moonlight** and pair it with the gaming VM. Pairing PIN comes from
   `https://192.168.0.79:47990`.
 - Apps: Steam Big Picture, EmulationStation, Desktop.
-- Install a native Jellyfin client (Jellyfin Media Player or a browser) and
-  point it at `http://192.168.0.16:8096`.
-- Autostart Moonlight fullscreen on boot.
+- Install **Jellyfin Media Player** and point it at
+  `https://jellyfin.tlauffs.com`. Play Jellyfin natively, not through Sunshine.
+- Jellyseerr is a request UI, not a player. Use `https://jellyseerr.tlauffs.com`
+  in a browser; a phone is the most convenient place for requests. If it should
+  be on the TV, add a browser shortcut but expect it to be less remote-friendly
+  than Jellyfin.
+- Put Moonlight, Jellyfin, and a Jellyseerr browser shortcut in the app grid or
+  desktop. Decide the boot target:
+  - Gaming-first: autostart Moonlight fullscreen, then exit it for Jellyfin.
+  - Mixed use: boot to the desktop/app grid instead, so Moonlight and Jellyfin
+    are both one click away.
+  Jellyfin is not a Moonlight/Sunshine app, so it will never appear in
+  Moonlight's app list.
 - Use wired Ethernet; Wi-Fi is the usual cause of stutter and input lag.
-- CachyOS is fine if the client already runs it. Bazzite or ChimeraOS is
-  simpler for a fresh appliance-like install.
+- Bazzite is the simplest fresh client: Jellyfin Media Player and a browser are
+  available as Flatpaks. CachyOS is fine if it is already installed; ChimeraOS
+  is more appliance-like but less flexible for a mixed Moonlight/Jellyfin box.
 
 ## Rollback
 
@@ -287,6 +358,7 @@ If the gaming VM does not work out:
 - [ ] Audio plays in the stream
 - [ ] Controller input works
 - [ ] EmulationStation launches and finds ROMs
+- [ ] One game each launches for NES, PS1, PS2, GameCube/Wii, and PSP
 - [ ] Jellyfin plays natively on the client
 - [ ] Jellyfin on the mediaserver transcodes 1080p on CPU
 - [ ] Gaming VM starts automatically after a host reboot
@@ -298,5 +370,6 @@ If the gaming VM does not work out:
 - Confirm `192.168.0.79` is reserved or statically configured.
 - Confirm 500 GB is enough for the game library.
 - Decide whether ROMs are local or on the NAS.
+- Add PS1 and PS2 BIOS files, and optionally PSP firmware.
 - Confirm the client machine, that it is wired, and its OS.
 - Decide whether to add RAM before raising the gaming VM above 12 GB.
