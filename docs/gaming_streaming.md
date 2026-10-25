@@ -233,6 +233,7 @@ ROMs:
 Firewall (only if ufw is enabled):
 
 ```bash
+sudo ufw allow 22/tcp
 sudo ufw allow 47984/tcp
 sudo ufw allow 47989/tcp
 sudo ufw allow 47990/tcp
