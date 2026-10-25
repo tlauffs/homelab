@@ -1,0 +1,93 @@
+---
+- name: Add the LizardByte pacman repository
+  blockinfile:
+    path: /etc/pacman.conf
+    marker: "# {mark} ANSIBLE MANAGED - LizardByte repository"
+    insertafter: EOF
+    block: |
+      [lizardbyte]
+      SigLevel = Optional
+      Server = https://github.com/LizardByte/pacman-repo/releases/latest/download
+
+- name: Update and upgrade packages
+  community.general.pacman:
+    update_cache: yes
+    upgrade: yes
+
+- name: Install gaming packages
+  community.general.pacman:
+    name:
+      - steam
+      - retroarch
+      - libretro-core-info
+      - libretro-snes9x
+      - libretro-mupen64plus-next
+      - libretro-mgba
+      - libretro-genesis-plus-gx
+      - qemu-guest-agent
+      - fuse2
+      - sunshine
+    state: present
+
+- name: Verify the NVIDIA driver
+  command: nvidia-smi
+  changed_when: false
+
+- name: Check for an existing filesystem on the game disk
+  command: blkid -o value -s TYPE /dev/sdb
+  register: games_disk_fs
+  changed_when: false
+  failed_when: false
+
+- name: Format the game disk
+  community.general.filesystem:
+    fstype: ext4
+    dev: /dev/sdb
+  when: games_disk_fs.rc != 0
+
+- name: Read the game disk UUID
+  command: blkid -o value -s UUID /dev/sdb
+  register: games_disk_uuid
+  changed_when: false
+
+- name: Mount the game disk by UUID
+  ansible.posix.mount:
+    path: /mnt/games
+    src: "UUID={{ games_disk_uuid.stdout | trim }}"
+    fstype: ext4
+    opts: defaults
+    state: mounted
+    boot: true
+
+- name: Set ownership of the game disk
+  file:
+    path: /mnt/games
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    recurse: no
+
+- name: Create the Steam library directory
+  file:
+    path: /mnt/games/SteamLibrary
+    state: directory
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0755'
+
+- name: Create the ES-DE install directory
+  file:
+    path: /opt/es-de
+    state: directory
+    mode: '0755'
+
+- name: Download the ES-DE AppImage
+  get_url:
+    url: https://gitlab.com/es-de/emulationstation-de/-/package_files/357718352/download
+    dest: /opt/es-de/ES-DE-3.5.0.AppImage
+    mode: '0755'
+
+- name: Link ES-DE into PATH
+  file:
+    src: /opt/es-de/ES-DE-3.5.0.AppImage
+    dest: /usr/local/bin/es-de
+    state: link

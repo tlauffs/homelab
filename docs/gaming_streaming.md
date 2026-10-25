@@ -1,220 +1,109 @@
-# Gaming Backend VM (Streaming + Retro)
+# Gaming VM (CachyOS + Sunshine)
 
-Stream Steam games and a retro library from a headless CachyOS VM on Proxmox to a
-living-room mini PC, using Sunshine + Moonlight.
+Stream Steam games and a retro library from a headless CachyOS VM on Proxmox to
+a living-room mini PC. Sunshine runs on the VM, Moonlight on the client.
+
+**Status:** VM created, CachyOS installed, SSH working, GPU passed through with
+`nvidia-smi` working, and native Sunshine installed with its web UI reachable
+directly and through NPM. A monitor connected to the passed-through GPU is
+currently providing a KMS output, and Sunshine now detects it and initializes
+NVENC. Permanent headless capture still needs the HDMI dummy plug. Steam login
+and ES-DE first-run setup are still to do.
 
 ## Decisions
 
-- Dedicated CachyOS gaming VM. The NVIDIA GPU moves from the mediaserver VM.
+- Dedicated CachyOS VM. The NVIDIA GPU moves from the mediaserver VM.
 - Jellyfin on the mediaserver falls back to CPU transcode. Target 1080p; 4K is
   direct-play only unless a second GPU is added later.
-- Stream target is 1080p60 to start, using an HDMI dummy plug.
-- The client boots into Moonlight. Steam Big Picture and EmulationStation are
-  Sunshine apps; Jellyfin runs natively on the client.
-- X11 session first. Wayland only if X11 causes problems.
+- Stream at 1080p60 using an HDMI dummy plug.
+- Wayland only: Plasma 6.8 has no X11 session. Use native Sunshine with KMS
+  capture; Flatpak can't do KMS, and its XDG portal path needs an interactive
+  screen-share prompt that a headless VM can't answer.
 - Plain `steam -gamepadui`; gamescope is a fallback, not the default.
-- Ansible manages packages and config files. Proxmox setup, OS install, Steam
-  login, and first-run app setup stay manual in this doc.
-- Hostname `gaming`, IP `192.168.0.79` (current DHCP lease; pin it with a DHCP
-  reservation or a static config in CachyOS).
-- GPU is an RTX 2070 (8 GB, Turing/NVENC), IOMMU group 15, currently passed
-  through as `0000:09:00`.
-
-## Status
-
-VM 200 is built manually through Phase 2. The Ansible role and Sunshine setup
-are not done yet.
-
-## Build log
-
-- [x] Create VM 200 (`gaming`)
-- [x] Install CachyOS
-- [x] SSH, autologin, X11 session
-- [x] Disable sleep/lock
-- [x] Guest agent
-- [x] Mount the 500 GB game disk
-- [ ] GPU passthrough
-- [ ] NVIDIA driver
-- [ ] Sunshine
-- [ ] Steam / EmulationStation
-- [ ] Client (Moonlight + Jellyfin)
+- Ansible owns packages, guest agent, autologin, firewall, Sunshine install and
+  capability, and formatting and mounting the game disk. Proxmox setup, OS
+  install, Steam login and first-run app setup stay manual in this doc.
+- Hostname `gaming` (VM 200), IP `192.168.0.79`.
+- GPU: RTX 2070 (8 GB, Turing/NVENC), IOMMU group 15, currently `0000:09:00`.
 
 ## Architecture
 
-```
-Proxmox host (headless; GPU already passed through to a VM)
-  └── mediaserver VM (192.168.0.16) — GPU removed, Jellyfin on CPU transcode
-  └── gaming VM (192.168.0.79, CachyOS) — NVIDIA RTX 2070 via VFIO
-        ├── Sunshine (host) + NVIDIA NVENC encode
-        ├── KDE Plasma (autologin, X11 first, the streamed desktop)
+```text
+Proxmox host 192.168.0.204 (headless, single GPU)
+  ├── mediaserver VM 192.168.0.16 — GPU removed, Jellyfin on CPU transcode
+  └── gaming VM 192.168.0.79 (CachyOS)
+        ├── Sunshine (native, KMS) + NVIDIA NVENC
+        ├── KDE Plasma (autologin, Wayland)
         ├── Steam Big Picture (`steam -gamepadui`)
         ├── EmulationStation-DE + RetroArch
         └── HDMI dummy plug (1080p60)
 
 Client (living-room mini PC, wired Ethernet)
-  ├── Moonlight (autostart) → gaming VM
-  │     └── app grid = [Steam Big Picture, EmulationStation, Desktop]
-  └── Jellyfin client → http://192.168.0.16:8096 (native, not streamed)
+  ├── Moonlight → gaming VM
+  └── Jellyfin → http://192.168.0.16:8096
 ```
 
-Notes:
+Jellyfin is not a Sunshine app; playing it natively avoids a second encode.
 
-- Moonlight is the simple home/TV UI. No kiosk browser on the gaming VM.
-- Jellyfin is not a Sunshine app. Playing it natively avoids a second encode.
-- The Proxmox host has a single GPU, so it is headless and managed via web UI
-  or SSH.
+## Manual steps
 
-## Phase 1 — Proxmox host prep
+These are one-time. Run them on the Proxmox host or in the VM, not via Ansible.
 
-The GPU is already passed through to the mediaserver, so vfio is configured.
-The card is an RTX 2070 at `09:00.0`, with audio, USB-C, and serial functions at
-`09:00.1`–`09:00.3`. All four are in IOMMU group 15 and bound to `vfio-pci`.
-The mediaserver passes the whole group as `0000:09:00`.
+### Create the VM — done
 
-Verify before changing anything:
+VM 200, name `gaming`. `local-lvm` is the 1 TB NVMe; keep OS and games there.
+
+| Setting | Value |
+| --- | --- |
+| Machine / BIOS | q35, OVMF (UEFI), no TPM |
+| CPU / memory | host, 6 cores, 12 GB, ballooning off |
+| Disks | 80 GB OS + 500 GB games on `local-lvm` |
+| Network | VirtIO on `vmbr0`, `192.168.0.79/24`, gateway `192.168.0.1` |
+| Display | std VGA for install, `none` after GPU passthrough |
+| Other | QEMU agent, start at boot |
+
+Download the ISO to `/var/lib/vz/template/iso` and verify its published
+checksum:
+
+```bash
+cd /var/lib/vz/template/iso
+wget https://iso.cachyos.org/desktop/260809/cachyos-desktop-linux-260809.iso
+sha256sum cachyos-desktop-linux-260809.iso
+```
+
+Install CachyOS (KDE Plasma) with **no GPU passed through** and Secure Boot off.
+Install to the 80 GB disk and leave the 500 GB game disk unformatted; the role
+formats and mounts it.
+
+### SSH — done
+
+```bash
+sudo systemctl enable --now sshd
+sudo ufw allow 22/tcp
+ssh-copy-id tim@192.168.0.79
+```
+
+Reserve the VM's MAC address to `.79` on the router, or configure the address
+statically in CachyOS, so the inventory entry keeps working.
+
+### GPU passthrough — done
+
+vfio is already configured because the mediaserver had the card. Verify before
+changing anything:
 
 ```bash
 lspci -nnk | grep -iA3 -E 'vga|3d|nvidia'
-readlink /sys/bus/pci/devices/0000:09:00.0/iommu_group
 qm config 108 | grep hostpci
 ```
 
-1. Shut down the mediaserver VM and the gaming VM.
-2. Remove `hostpci0` from the mediaserver VM:
-   `qm set 108 --delete hostpci0`
-3. Add the GPU to the gaming VM:
-   `qm set 200 --hostpci0 0000:09:00,pcie=1,rombar=1`
-   In the web UI that is **Primary GPU**, **ROM-Bar**, **PCI-Express**.
-4. Start the gaming VM. A host reboot is normally not needed.
-
-If vfio is not already bound to the GPU, do the full host setup:
-
-- `/etc/modules`: add `vfio`, `vfio_iommu_type1`, `vfio_pci`.
-- `/etc/modprobe.d/blacklist.conf`: `blacklist nouveau`, `blacklist nvidia`,
-  `blacklist nvidiafb`.
-- `/etc/modprobe.d/vfio.conf`:
-  `options vfio-pci ids=10de:1f02,10de:10f9` (RTX 2070 + audio).
-- `update-initramfs -u`, reboot, then verify with
-  `lspci -k | grep -A2 VGA` → kernel driver in use: `vfio-pci`.
-
-## Phase 2 — Create the CachyOS VM
-
-The Proxmox host is `192.168.0.204`. `local-lvm` is the 1 TB NVMe; `tank` is a
-2×4 TB HDD mirror. Keep the OS and games on `local-lvm`.
-
-1. Download and verify the ISO on the Proxmox host:
-
-   ```bash
-   cd /var/lib/vz/template/iso
-   wget https://iso.cachyos.org/desktop/260809/cachyos-desktop-linux-260809.iso
-   sha256sum cachyos-desktop-linux-260809.iso
-   # 959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c
-   ```
-
-2. Create VM `200` (`gaming`):
-   - Machine: **q35**
-   - BIOS: **OVMF (UEFI)**. No TPM needed for Linux.
-   - CPU: type **host**, 6 cores
-   - Memory: **12 GB**, **disable ballooning**. The host has 31 GB and the
-     mediaserver uses 8 GB; raise this only after checking swap.
-   - Network: VirtIO, bridge `vmbr0`, IP `192.168.0.79/24`, gateway
-     `192.168.0.1`
-   - Display: **std VGA** for install
-   - Disks: 80 GB OS disk on `local-lvm` + 500 GB game disk on `local-lvm`
-   - Options: **Start at boot** (`onboot=1`), QEMU agent enabled
-
-   ```bash
-   qm create 200 \
-     --name gaming \
-     --ostype l26 \
-     --machine q35 \
-     --bios ovmf \
-     --efidisk0 local-lvm:1,efitype=4m,pre-enrolled-keys=0 \
-     --cpu host \
-     --sockets 1 \
-     --cores 6 \
-     --memory 12288 \
-     --balloon 0 \
-     --scsihw virtio-scsi-single \
-     --scsi0 local-lvm:80,discard=on,ssd=1,iothread=1 \
-     --scsi1 local-lvm:500,discard=on,ssd=1,iothread=1 \
-     --ide2 local:iso/cachyos-desktop-linux-260809.iso,media=cdrom \
-     --net0 virtio,bridge=vmbr0,firewall=0 \
-     --vga std \
-     --boot order=ide2 \
-     --onboot 1 \
-     --agent enabled=1
-   qm start 200
-   ```
-
-3. Install CachyOS (KDE Plasma) **without the GPU**. The installer cannot
-   detect the RTX 2070 yet, so do not select an NVIDIA option.
-   - Keep Secure Boot off.
-   - Install to the 80 GB disk. Leave the 500 GB disk alone for now.
-4. Remove the ISO and boot from disk:
-
-   ```bash
-   qm set 200 --delete ide2
-   qm set 200 --boot order=scsi0
-   ```
-
-5. First boot baseline. These are manual on the first build; the Ansible role
-   will own the repeatable parts.
-   - Pin the IP: reserve MAC `BC:24:11:5E:C6:0D` → `192.168.0.79` on the
-     router, or set `.79` statically in CachyOS.
-   - Enable SSH and allow it through ufw:
-
-     ```bash
-     sudo systemctl enable --now sshd
-     sudo ufw allow 22/tcp
-     ```
-
-   - Add your SSH key: `ssh-copy-id tim@192.168.0.79`.
-   - Autologin + X11:
-
-     ```bash
-     ls /usr/share/xsessions/
-     sudo mkdir -p /etc/sddm.conf.d
-     sudo tee /etc/sddm.conf.d/autologin.conf >/dev/null <<'EOF'
-     [Autologin]
-     User=tim
-     Session=plasmax11.desktop
-     EOF
-     ```
-
-     Reboot and verify `echo $XDG_SESSION_TYPE` prints `x11`.
-   - Disable sleep/lock in KDE: **Power Management** and **Screen Locking**.
-   - Guest agent:
-
-     ```bash
-     sudo pacman -S --needed qemu-guest-agent
-     sudo systemctl enable --now qemu-guest-agent
-     ```
-
-     Verify from Proxmox: `qm agent 200 ping`.
-   - Game disk (confirm the device first):
-
-     ```bash
-     lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT
-     sudo mkfs.ext4 /dev/sdb
-     sudo mkdir -p /mnt/games
-     sudo mount /dev/sdb /mnt/games
-     sudo blkid /dev/sdb
-     ```
-
-     Add the UUID to `/etc/fstab`, then:
-
-     ```bash
-     sudo systemctl daemon-reload
-     sudo mount -a
-     sudo chown tim:tim /mnt/games
-     mkdir -p /mnt/games/SteamLibrary
-     ```
-
-6. Shut down, add the GPU (see Phase 1), set display to `none`:
-   `qm set 200 --vga none`
-   - VNC stops working after this; use SSH.
-7. Boot, then install the NVIDIA driver with CachyOS hardware detection:
+1. Shut down the mediaserver and gaming VMs.
+2. Remove the GPU from the mediaserver: `qm set 108 --delete hostpci0`
+3. Add it to the gaming VM: `qm set 200 --hostpci0 0000:09:00,pcie=1,rombar=1`
+   (web UI: **Primary GPU**, **ROM-Bar**, **PCI-Express**).
+4. `qm set 200 --vga none`. VNC stops working after this; use SSH. The web UI
+   console then reports `Failed to run vncproxy`, which is expected without an
+   emulated display.
+5. Start the VM and install the NVIDIA driver with CachyOS hardware detection:
 
    ```bash
    sudo chwd -a
@@ -222,124 +111,131 @@ The Proxmox host is `192.168.0.204`. `local-lvm` is the 1 TB NVMe; `tank` is a
    nvidia-smi
    ```
 
-   If `chwd` picks the wrong profile, use
-   `sudo chwd -i nvidia-dkms-580xx` (or `nvidia-open-dkms`). Turing is
-   supported by both.
+   If `chwd` picks the wrong profile, use `sudo chwd -i nvidia-dkms-580xx`;
+   Turing is also supported by `nvidia-open-dkms`.
+6. On the mediaserver, disable Jellyfin hardware transcoding: **Dashboard →
+   Playback → Transcoding → Hardware acceleration: None**. The LinuxServer
+   image has no environment variable for this, so it stays manual (stored in
+   `/config/encoding.xml`). Without it, Jellyfin keeps trying NVENC and playback
+   fails.
 
-## Phase 3 — Gaming VM software
+#### Console access
 
-### Manual first run
+`vga none` means there is no emulated display, so the web UI console fails with
+`qmp command 'set_password' failed` / `Failed to run vncproxy`. That is expected;
+administer the VM over SSH.
 
-- Log into Steam, enable Big Picture, and add the game disk as a library folder.
-- Run EmulationStation-DE once and point it at the ROM directory.
-- Open the Sunshine web UI (`https://192.168.0.79:47990`), set credentials,
-  and pair Moonlight.
+For a one-off fix, shut down the VM,
+temporarily `qm set 200 --vga std`, start it, and remove it again afterwards.
 
-### Ansible-managed
+### Sunshine web UI via NPM — done
 
-Packages (pacman / AUR via `paru`):
+NPM provides HTTPS for the web UI only; Moonlight still connects directly to the
+VM. The proxy host is:
 
-- `steam`
-- `retroarch` plus cores (snes9x, mupen64plus, mgba, genesis_plus_gx, …)
-- `emulationstation-de`
-- `sunshine`
-- `cifs-utils` only if ROMs stay on the NAS
+| Setting | Value |
+| --- | --- |
+| Domain | `sunshine.tlauffs.com` |
+| Scheme | `https` |
+| Forward host / port | `192.168.0.79` / `47990` |
+| Websockets | enabled |
+| SSL verification | off (Sunshine uses a self-signed certificate) |
+| Path | none |
 
-NVIDIA is installed after passthrough with `sudo chwd -a`. The role only
-verifies `nvidia-smi`; it does not manage DKMS.
+Point the DNS record at NPM and make sure the VM's firewall allows `47990`. The
+VM role allows both the direct and NPM URLs for CSRF (see below).
 
-Sunshine config (`~/.config/sunshine/sunshine.conf`):
+### First run — in progress
 
-```ini
-encoder = nvenc
-```
+The role formats and mounts the game disk at `/mnt/games`. The remaining steps
+are account logins and physical setup:
 
-Sunshine setup:
+- Plug an HDMI dummy plug into the passed-through GPU at 1080p60 for permanent
+  headless capture. It is an EDID emulator, not a monitor: KMS capture needs a
+  connected output even though the client is the only real display. Without it
+  Sunshine finds no display and no encoder. A monitor connected to the GPU can
+  stand in temporarily; keep it on the VM input while testing, because switching
+  it back to the PC may remove the KMS output. The monitor must be on the VM
+  input at boot, since Sunshine enumerates KMS at startup. This is the remaining
+  hardware item.
+- Open the Sunshine web UI (`https://192.168.0.79:47990` or
+  `https://sunshine.tlauffs.com` through NPM), set credentials, and pair
+  Moonlight once KMS sees the display. Native Sunshine uses KMS capture, so
+  there is no portal prompt. Reboot after the role run so autologin starts it.
+- Log into Steam, enable Big Picture, and add `/mnt/games/SteamLibrary` as a
+  library folder.
+- Run EmulationStation-DE once and point it at the ROM directory. Its Sunshine
+  app entry is already managed by the role; after a reboot it appears in
+  Moonlight as **EmulationStation**.
 
-```bash
-echo 'KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"' \
-  | sudo tee /etc/udev/rules.d/85-sunshine-input.rules
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-sudo setcap cap_sys_admin+p "$(readlink -f "$(command -v sunshine)")"
-systemctl --user enable --now sunshine
-```
+## Ansible
 
-Note: `setcap` is lost when the Sunshine package updates. The role reapplies it.
+The role follows the existing one-role-per-host pattern:
 
-Steam:
-
-- Default app command: `steam -gamepadui`
-- Fallback if the stream is black or scaled wrong: try `gamescope -- steam -gamepadui`
-- Do not add gamescope until it is actually needed.
-
-EmulationStation-DE:
-
-- Add a Sunshine app entry that launches `emulationstation`.
-- RetroArch is detected automatically.
-
-Audio:
-
-- Create a persistent PipeWire null sink and select its monitor as the Sunshine
-  audio sink. This keeps game audio in the stream and off any physical output.
-- Verify audio in Moonlight before adding more apps.
-
-ROMs:
-
-- Prefer a local copy on the game disk. ES-DE scans faster and the stream does
-  not depend on the NAS.
-- If space is tight, mount the NAS share from `docs/storage_backup.md` at
-  `/mnt/nas/roms` and point ES-DE there.
-
-Firewall (only if ufw is enabled):
-
-```bash
-sudo ufw allow 22/tcp
-sudo ufw allow 47984/tcp
-sudo ufw allow 47989/tcp
-sudo ufw allow 47990/tcp
-sudo ufw allow 48010/tcp
-sudo ufw allow 47998/udp
-sudo ufw allow 47999/udp
-sudo ufw allow 48000/udp
-sudo ufw allow 48002/udp
-sudo ufw allow 48010/udp
-```
-
-## Phase 4 — Virtual display
-
-Without a display the GPU framebuffer is inactive and Sunshine streams black.
-
-- **Use an HDMI dummy plug at 1080p60.** Simple and reliable.
-- EDID virtual display is a later option if the plug is not enough. It needs
-  kernel params and a custom EDID, and modes are fixed until reboot.
-
-## Phase 5 — Ansible
-
-Add:
-
-```
+```text
 ansible/roles/gaming/
-  tasks/main.yml       # imports setup.yml + config.yml + sunshine.yml
-  tasks/setup.yml      # packages, nvidia check, directories
-  tasks/config.yml     # autologin, ufw, guest agent, game disk mount
-  tasks/sunshine.yml   # config, udev rule, setcap, user service
+  tasks/main.yml       # setup + config + sunshine
+  tasks/setup.yml      # LizardByte repo, packages, disk format + mount, ES-DE
+  tasks/config.yml     # Wayland autologin, ufw, guest agent, lock/sleep
+  tasks/sunshine.yml   # capability, config, app entries, autostart
   templates/autologin.conf.j2
-  templates/sunshine.conf.j2
+  templates/sunshine.desktop.j2
   templates/apps.json.j2
 ```
 
-What stays manual vs what the role owns:
+Run it with:
 
-| Task | Where |
+```bash
+ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml \
+  --ask-become-pass --ask-vault-pass -l gaming
+```
+
+`config.yml` detects whether CachyOS uses SDDM or Plasma Login Manager and writes
+the autologin file to the matching config directory.
+
+| Ansible | Manual |
 | --- | --- |
-| Proxmox VM creation, GPU passthrough | manual, this doc |
-| CachyOS install, disk formatting, Steam login | manual |
-| Packages, guest agent, autologin, ufw, fstab mount | Ansible |
-| Sunshine config, app entries, PipeWire sink | Ansible |
-| Moonlight pairing, ES-DE first run | manual |
+| Packages, guest agent, autologin (Wayland) | Proxmox VM and GPU passthrough |
+| ufw, disk format, fstab mount by UUID | CachyOS install |
+| Sunshine native package, capability, config, app entries, autostart, ES-DE AppImage | Steam login, ES-DE first run, Sunshine credentials/pairing, NPM proxy |
 
-The role should mount the game disk by UUID. Formatting it stays manual.
+`setup.yml` formats `/dev/sdb` only if it has no filesystem yet, then mounts it
+by UUID at `/mnt/games`. An existing filesystem with data is never overwritten.
+
+Packages from the official repos: `steam`, `retroarch` plus cores
+(`libretro-snes9x`, `libretro-mupen64plus-next`, `libretro-mgba`,
+`libretro-genesis-plus-gx`), `qemu-guest-agent`, `fuse2`, and `cifs-utils` only
+if ROMs stay on the NAS. The role verifies `nvidia-smi` but does not manage
+DKMS.
+
+Sunshine and EmulationStation-DE are not in the official Arch repos. Use
+upstream packages instead of the AUR:
+
+- Sunshine: the native package from LizardByte's pacman repo. The role adds the
+  repo, installs `sunshine`, and re-applies `cap_sys_admin,cap_sys_nice` so KMS
+  capture works on Wayland. The package's install script also sets up the
+  `uinput`/`uhid` udev rules. Flatpak can't do KMS, and its portal capture needs
+  an interactive consent dialog that a headless VM can't answer.
+- EmulationStation-DE: the upstream Linux x86_64 AppImage from `es-de.org`,
+  installed as `es-de`.
+
+The role installs Sunshine and starts it at login. Sunshine uses KMS capture and
+auto-detects NVENC on the passed-through card. Ports 47984, 47989, 47990,
+48010/tcp and 47998–48000, 48002, 48010/udp are opened when ufw is active.
+
+The role also manages `apps.json` with Desktop, Steam Big Picture, and
+EmulationStation. Low Res Desktop is omitted because its `xrandr` prep command
+is X11-only. Sunshine reads the app list at startup, so restart Sunshine or
+reboot after changing it.
+
+The role allows both the direct LAN URL and the NPM HTTPS URL for CSRF:
+
+```ini
+csrf_allowed_origins = https://192.168.0.79:47990,https://sunshine.tlauffs.com
+```
+
+Update this line if either address changes. NPM proxies only the web UI; Moonlight
+still connects directly to the VM.
 
 Inventory:
 
@@ -348,43 +244,32 @@ Inventory:
 192.168.0.79 ansible_user=tim ansible_become=true
 ```
 
-Playbook:
-
-```yaml
-- name: Configure gaming VM
-  hosts: gaming
-  become: true
-  roles:
-    - gaming
-```
-
+Playbook: one play for `hosts: gaming` with `roles: [gaming]`.
 Tags: `gaming_setup`, `gaming_config`, `gaming_sunshine`.
 
-In the same change that moves the GPU, remove the NVIDIA tasks and the Jellyfin
-`runtime: nvidia` from the mediaserver role. Do not remove them before the move,
-or the current mediaserver breaks.
+The mediaserver role no longer installs the NVIDIA driver/toolkit or requests
+the `nvidia` runtime; Jellyfin runs on CPU transcode. The removed tasks are in
+git history if you need to roll back.
 
-## Phase 6 — Client (living-room mini PC)
+## Client (living-room mini PC)
 
-- CachyOS is fine if the client already runs it. If installing fresh and you
-  want appliance-like behavior, Bazzite or ChimeraOS is simpler; the client only
-  needs Moonlight and a Jellyfin client.
-- Install **Moonlight** and pair it with the gaming VM using the PIN from
+- Install **Moonlight** and pair it with the gaming VM. Pairing PIN comes from
   `https://192.168.0.79:47990`.
 - Apps: Steam Big Picture, EmulationStation, Desktop.
 - Install a native Jellyfin client (Jellyfin Media Player or a browser) and
   point it at `http://192.168.0.16:8096`.
 - Autostart Moonlight fullscreen on boot.
-- Use wired Ethernet. Wi-Fi is the usual cause of stutter and input lag.
+- Use wired Ethernet; Wi-Fi is the usual cause of stutter and input lag.
+- CachyOS is fine if the client already runs it. Bazzite or ChimeraOS is
+  simpler for a fresh appliance-like install.
 
 ## Rollback
 
 If the gaming VM does not work out:
 
 1. Shut down the gaming VM.
-2. Remove its `hostpci0`: `qm set 200 --delete hostpci0`
-3. Add the GPU back to the mediaserver VM:
-   `qm set 108 --hostpci0 0000:09:00`
+2. `qm set 200 --delete hostpci0`
+3. `qm set 108 --hostpci0 0000:09:00`
 4. Restore the NVIDIA tasks and Jellyfin `runtime: nvidia` in the mediaserver
    role, or re-run the previous commit.
 5. Start the mediaserver and verify `nvidia-smi` and Jellyfin hardware
@@ -392,8 +277,11 @@ If the gaming VM does not work out:
 
 ## Acceptance checklist
 
-- [ ] `nvidia-smi` works in the gaming VM
-- [ ] Sunshine UI reachable at `https://192.168.0.79:47990`
+- [x] `nvidia-smi` works in the gaming VM
+- [x] Sunshine UI reachable directly and through NPM
+- [x] KMS output detected (monitor or dummy plug)
+- [ ] HDMI dummy plug installed for permanent headless capture
+- [ ] EmulationStation appears in the Sunshine/Moonlight app list
 - [ ] Moonlight pairs successfully
 - [ ] Steam Big Picture streams at 1080p60
 - [ ] Audio plays in the stream
@@ -405,14 +293,10 @@ If the gaming VM does not work out:
 
 ## Open items
 
+- Install the HDMI dummy plug for permanent headless capture. A monitor can stand
+  in temporarily, but switching it back to the PC may remove the KMS output.
 - Confirm `192.168.0.79` is reserved or statically configured.
 - Confirm 500 GB is enough for the game library.
 - Decide whether ROMs are local or on the NAS.
-- Confirm the client machine and that it is wired.
-- Confirm the client OS choice (CachyOS vs Bazzite/ChimeraOS).
+- Confirm the client machine, that it is wired, and its OS.
 - Decide whether to add RAM before raising the gaming VM above 12 GB.
-- Accept that 4K Jellyfin transcodes are out of scope for now.
-
-## Ports (reference)
-
-Sunshine needs: 47984, 47989, 47990, 48010 TCP; 47998–48000, 48002, 48010 UDP.

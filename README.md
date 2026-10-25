@@ -16,7 +16,7 @@ This repository contains configurations and automation for my homelab setup.
 
 - [Proxmox Setup](./docs/proxmox_setup.md)
 - [Backup/Storage Setup](docs/storage_backup.md)
-- [Gaming Streaming (gaming VM)](./docs/gaming_streaming.md)
+- [Gaming VM (CachyOS + Sunshine)](./docs/gaming_streaming.md)
 - [Monitoring](./docs/monitoring.md)
 - [Game Servers (VPS)](docs/gameserver_vps.md)
 

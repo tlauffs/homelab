@@ -1,0 +1,105 @@
+---
+- name: Detect the display manager
+  command: systemctl show -p Id --value display-manager.service
+  register: gaming_display_manager
+  changed_when: false
+
+- name: Select the display manager autologin settings
+  set_fact:
+    gaming_dm_config_dir: "{{ '/etc/plasmalogin.conf.d' if 'plasmalogin' in gaming_display_manager.stdout else '/etc/sddm.conf.d' }}"
+    gaming_dm_session: "{{ 'plasma.desktop' if 'plasmalogin' in gaming_display_manager.stdout else 'plasma' }}"
+
+- name: Ensure the display manager config directory exists
+  file:
+    path: "{{ gaming_dm_config_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Enable KDE autologin on Wayland
+  template:
+    src: autologin.conf.j2
+    dest: "{{ gaming_dm_config_dir }}/autologin.conf"
+    mode: '0644'
+
+- name: Enable the QEMU guest agent
+  service:
+    name: qemu-guest-agent
+    state: started
+    enabled: yes
+
+- name: Ensure the user config directory exists
+  file:
+    path: "/home/{{ homelab_user }}/.config"
+    state: directory
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0755'
+
+- name: Disable KDE screen locking
+  community.general.ini_file:
+    path: "/home/{{ homelab_user }}/.config/kscreenlockerrc"
+    section: Daemon
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0644'
+  loop:
+    - option: Autolock
+      value: "false"
+    - option: LockOnResume
+      value: "false"
+
+- name: Disable KDE screen dimming and power-off
+  community.general.ini_file:
+    path: "/home/{{ homelab_user }}/.config/powerdevilrc"
+    section: AC][Display
+    option: "{{ item }}"
+    value: "false"
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0644'
+  loop:
+    - DimDisplayWhenIdle
+    - TurnOffDisplayWhenIdle
+
+- name: Mask sleep targets so the VM never suspends
+  systemd:
+    name: "{{ item }}"
+    masked: yes
+  loop:
+    - sleep.target
+    - suspend.target
+    - hibernate.target
+    - hybrid-sleep.target
+
+- name: Check whether ufw is active
+  command: ufw status
+  register: ufw_status
+  changed_when: false
+  failed_when: false
+
+- name: Allow Sunshine TCP ports through ufw
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - 47984
+    - 47989
+    - 47990
+    - 48010
+  when: "ufw_status.rc == 0 and 'Status: active' in ufw_status.stdout"
+
+- name: Allow Sunshine UDP ports through ufw
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: udp
+  loop:
+    - 47998
+    - 47999
+    - 48000
+    - 48002
+    - 48010
+  when: "ufw_status.rc == 0 and 'Status: active' in ufw_status.stdout"

@@ -1,0 +1,55 @@
+---
+- name: Grant Sunshine KMS capture capabilities
+  community.general.capabilities:
+    path: /usr/bin/sunshine
+    capability: cap_sys_admin,cap_sys_nice+p
+    state: present
+
+- name: Ensure the Sunshine config directory exists
+  file:
+    path: "/home/{{ homelab_user }}/.config/sunshine"
+    state: directory
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0755'
+
+- name: Configure Sunshine for headless KMS capture
+  lineinfile:
+    path: "/home/{{ homelab_user }}/.config/sunshine/sunshine.conf"
+    regexp: "^{{ item.key }}\\s*="
+    line: "{{ item.key }} = {{ item.value }}"
+    create: yes
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0644'
+  loop:
+    - key: capture
+      value: kms
+    - key: system_tray
+      value: disabled
+    - key: csrf_allowed_origins
+      value: "https://{{ inventory_hostname }}:47990,https://sunshine.tlauffs.com"
+
+- name: Configure Sunshine applications
+  template:
+    src: apps.json.j2
+    dest: "/home/{{ homelab_user }}/.config/sunshine/apps.json"
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0644'
+
+- name: Ensure the user autostart directory exists
+  file:
+    path: "/home/{{ homelab_user }}/.config/autostart"
+    state: directory
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0755'
+
+- name: Start Sunshine at login
+  template:
+    src: sunshine.desktop.j2
+    dest: "/home/{{ homelab_user }}/.config/autostart/sunshine.desktop"
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0644'

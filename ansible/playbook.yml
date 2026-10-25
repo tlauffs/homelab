@@ -28,6 +28,12 @@
   roles:
     - mediaserver
 
+- name: Configure gaming VM
+  hosts: gaming
+  become: true
+  roles:
+    - gaming
+
 - name: Configure Immich lxc 
   hosts: immich_lxc 
   become: true

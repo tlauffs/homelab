@@ -1,0 +1,12 @@
+---
+- name: Import base system setup tasks
+  import_tasks: setup.yml
+  tags: gaming_setup
+
+- name: Import configuration tasks
+  import_tasks: config.yml
+  tags: gaming_config
+
+- name: Import Sunshine tasks
+  import_tasks: sunshine.yml
+  tags: gaming_sunshine

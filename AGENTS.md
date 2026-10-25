@@ -52,13 +52,25 @@ ansible-playbook -i ansible/inventory/hosts.ini ansible/playbook.yml \
    abstractions when the current setup can do the job. If there is a good reason
    to abstract — or something like CI/CD, Kubernetes, Terraform, or a custom
    framework genuinely helps — ask the user first.
-3. **Manual one-time work stays manual.** Document it in `docs/` instead of
-   automating it.
-4. **Follow existing patterns.** Same role layout, compose template, tags, and
+3. **Automate repeatable work.** If Ansible can do a task safely, put it in the
+   role instead of documenting it as a manual step. Manual steps are the
+   exception. Guard destructive actions (for example, format a disk only when
+   it is empty). Only work that genuinely cannot be automated — creating the
+   VM, installing the OS, logins/pairing, physical setup — stays manual in
+   `docs/`.
+4. **Prefer official packages and Docker.** Use the official repositories
+   first, and run services in Docker instead of installing them on the host.
+   Avoid AUR packages; prefer a container, Flatpak, or upstream release. Ask
+   before adding an AUR dependency. Host-session tools that need direct access
+   to hardware or the desktop are the exception.
+5. **Follow existing patterns.** Same role layout, compose template, tags, and
    `homelab_user` / `/data` / `/docker` conventions.
-5. **Scope discipline.** Only touch the host you're working on; ask before
+6. **Scope discipline.** Only touch the host you're working on; ask before
    changing shared vars or unrelated roles.
-6. **Docs stay in sync.** Update the matching file in `docs/` in the same change.
-7. **Verify narrowly.** Run with `-l <host>` and `--check` where possible before
+7. **Docs stay in sync.** Update the matching file in `docs/` in the same change.
+8. **Verify narrowly.** Run with `-l <host>` and `--check` where possible before
    running across the whole inventory.
-8. **Secrets never go in plaintext.** Use `ansible-vault`.
+9. **Secrets never go in plaintext.** Use `ansible-vault`.
+10. **Never connect to remote hosts.** Do not run `ssh`, `ansible`, or any other
+    command against a host. The user runs deployment and verification commands;
+    propose the exact command instead. Local repo inspection is fine.
