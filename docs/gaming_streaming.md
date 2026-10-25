@@ -1,7 +1,7 @@
 # Gaming Backend VM (Streaming + Retro)
 
 Stream Steam games and a retro library from a headless CachyOS VM on Proxmox to a
-CachyOS thin-client mini PC in the living room, using Sunshine + Moonlight.
+living-room mini PC, using Sunshine + Moonlight.
 
 ## Decisions
 
@@ -15,7 +15,10 @@ CachyOS thin-client mini PC in the living room, using Sunshine + Moonlight.
 - Plain `steam -gamepadui`; gamescope is a fallback, not the default.
 - Ansible manages packages and config files. Proxmox setup, OS install, Steam
   login, and first-run app setup stay manual in this doc.
-- Hostname `gaming`, IP `192.168.0.108` (confirm it is free).
+- Hostname `gaming`, IP `192.168.0.111`. `.108` is free but collides mentally
+  with VMID 108 (media).
+- GPU is an RTX 2070 (8 GB, Turing/NVENC), IOMMU group 15, currently passed
+  through as `0000:09:00`.
 
 ## Status
 
@@ -26,14 +29,14 @@ Planned. There is no `gaming` role, inventory group, or playbook entry yet.
 ```
 Proxmox host (headless; GPU already passed through to a VM)
   └── mediaserver VM (192.168.0.16) — GPU removed, Jellyfin on CPU transcode
-  └── gaming VM (192.168.0.108, CachyOS) — NVIDIA GPU via VFIO
+  └── gaming VM (192.168.0.111, CachyOS) — NVIDIA RTX 2070 via VFIO
         ├── Sunshine (host) + NVIDIA NVENC encode
         ├── KDE Plasma (autologin, X11 first, the streamed desktop)
         ├── Steam Big Picture (`steam -gamepadui`)
         ├── EmulationStation-DE + RetroArch
         └── HDMI dummy plug (1080p60)
 
-Client (CachyOS mini PC, wired Ethernet)
+Client (living-room mini PC, wired Ethernet)
   ├── Moonlight (autostart) → gaming VM
   │     └── app grid = [Steam Big Picture, EmulationStation, Desktop]
   └── Jellyfin client → http://192.168.0.16:8096 (native, not streamed)
@@ -48,22 +51,25 @@ Notes:
 
 ## Phase 1 — Proxmox host prep
 
-The GPU is currently passed through to the mediaserver, so vfio should already
-be configured. Verify before changing anything:
+The GPU is already passed through to the mediaserver, so vfio is configured.
+The card is an RTX 2070 at `09:00.0`, with audio, USB-C, and serial functions at
+`09:00.1`–`09:00.3`. All four are in IOMMU group 15 and bound to `vfio-pci`.
+The mediaserver passes the whole group as `0000:09:00`.
+
+Verify before changing anything:
 
 ```bash
 lspci -nnk | grep -iA3 -E 'vga|3d|nvidia'
-for g in /sys/kernel/iommu_groups/*; do echo "== $g =="; ls $g/devices/; done
-qm config <mediaserver-vmid> | grep hostpci
+readlink /sys/bus/pci/devices/0000:09:00.0/iommu_group
+qm config 108 | grep hostpci
 ```
 
-Confirm the GPU and its audio device are both in `hostpci0` and in the same
-IOMMU group.
-
 1. Shut down the mediaserver VM and the gaming VM.
-2. Remove `hostpci0` from the mediaserver VM (web UI → Hardware → remove).
-3. Add the GPU to the gaming VM: **Primary GPU**, **ROM-Bar**,
-   **PCI-Express**.
+2. Remove `hostpci0` from the mediaserver VM:
+   `qm set 108 --delete hostpci0`
+3. Add the GPU to the gaming VM:
+   `qm set 200 --hostpci0 0000:09:00,pcie=1,rombar=1`
+   In the web UI that is **Primary GPU**, **ROM-Bar**, **PCI-Express**.
 4. Start the gaming VM. A host reboot is normally not needed.
 
 If vfio is not already bound to the GPU, do the full host setup:
@@ -72,35 +78,92 @@ If vfio is not already bound to the GPU, do the full host setup:
 - `/etc/modprobe.d/blacklist.conf`: `blacklist nouveau`, `blacklist nvidia`,
   `blacklist nvidiafb`.
 - `/etc/modprobe.d/vfio.conf`:
-  `options vfio-pci ids=10de:XXXX,10de:YYYY` (GPU + audio IDs).
+  `options vfio-pci ids=10de:1f02,10de:10f9` (RTX 2070 + audio).
 - `update-initramfs -u`, reboot, then verify with
   `lspci -k | grep -A2 VGA` → kernel driver in use: `vfio-pci`.
 
 ## Phase 2 — Create the CachyOS VM
 
-1. Download the CachyOS ISO.
-2. Create the VM:
-   - Machine: **q35**
-   - BIOS: **OVMF (UEFI)**. No TPM needed for Linux.
-   - CPU: type **host**, 6+ cores
-   - Memory: 16 GB+, **disable ballooning**
-   - Network: VirtIO, bridge `vmbr0`, IP `192.168.0.108/24`
-   - Display: **std VGA** for install
-   - Disks: OS disk + a **local** disk for the Steam library
-   - Options: **Start at boot** (`onboot=1`)
-3. Install CachyOS (KDE Plasma):
-   - Select the NVIDIA driver option in the installer.
-   - Keep Secure Boot off.
-   - Enable SSH (`sudo systemctl enable --now sshd`).
-   - Enable autologin for `tim` and disable screen lock/display sleep.
-   - Add the SSH key: `ssh-copy-id tim@192.168.0.108`.
-4. Shut down, add the GPU (see Phase 1), set display to `none`.
-   - VNC stops working after this; use SSH or Moonlight.
-5. Boot and verify:
+The Proxmox host is `192.168.0.204`. `local-lvm` is the 1 TB NVMe; `tank` is a
+2×4 TB HDD mirror. Keep the OS and games on `local-lvm`.
+
+1. Download and verify the ISO on the Proxmox host:
 
    ```bash
+   cd /var/lib/vz/template/iso
+   wget https://iso.cachyos.org/desktop/260809/cachyos-desktop-linux-260809.iso
+   sha256sum cachyos-desktop-linux-260809.iso
+   # 959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c
+   ```
+
+2. Create VM `200` (`gaming`):
+   - Machine: **q35**
+   - BIOS: **OVMF (UEFI)**. No TPM needed for Linux.
+   - CPU: type **host**, 6 cores
+   - Memory: **12 GB**, **disable ballooning**. The host has 31 GB and the
+     mediaserver uses 8 GB; raise this only after checking swap.
+   - Network: VirtIO, bridge `vmbr0`, IP `192.168.0.111/24`, gateway
+     `192.168.0.1`
+   - Display: **std VGA** for install
+   - Disks: 80 GB OS disk on `local-lvm` + 500 GB game disk on `local-lvm`
+   - Options: **Start at boot** (`onboot=1`), QEMU agent enabled
+
+   ```bash
+   qm create 200 \
+     --name gaming \
+     --ostype l26 \
+     --machine q35 \
+     --bios ovmf \
+     --efidisk0 local-lvm:1,efitype=4m,pre-enrolled-keys=0 \
+     --cpu host \
+     --sockets 1 \
+     --cores 6 \
+     --memory 12288 \
+     --balloon 0 \
+     --scsihw virtio-scsi-single \
+     --scsi0 local-lvm:80,discard=on,ssd=1,iothread=1 \
+     --scsi1 local-lvm:500,discard=on,ssd=1,iothread=1 \
+     --ide2 local:iso/cachyos-desktop-linux-260809.iso,media=cdrom \
+     --net0 virtio,bridge=vmbr0,firewall=0 \
+     --vga std \
+     --boot order=ide2 \
+     --onboot 1 \
+     --agent enabled=1
+   qm start 200
+   ```
+
+3. Install CachyOS (KDE Plasma) **without the GPU**. The installer cannot
+   detect the RTX 2070 yet, so do not select an NVIDIA option.
+   - Keep Secure Boot off.
+   - Install to the 80 GB disk. Leave the 500 GB disk alone for now.
+   - Enable SSH (`sudo systemctl enable --now sshd`).
+   - Set the static IP with `nmcli` or a DHCP reservation.
+   - Enable autologin for `tim`, pick the **Plasma (X11)** session, and disable
+     screen lock/display sleep.
+   - Add the SSH key: `ssh-copy-id tim@192.168.0.111`.
+   - Install the guest agent: `sudo pacman -S --needed qemu-guest-agent` and
+     `sudo systemctl enable --now qemu-guest-agent`.
+4. Remove the ISO and boot from disk:
+
+   ```bash
+   qm set 200 --delete ide2
+   qm set 200 --boot order=scsi0
+   ```
+
+5. Shut down, add the GPU (see Phase 1), set display to `none`:
+   `qm set 200 --vga none`
+   - VNC stops working after this; use SSH.
+6. Boot, then install the NVIDIA driver with CachyOS hardware detection:
+
+   ```bash
+   sudo chwd -a
+   sudo reboot
    nvidia-smi
    ```
+
+   If `chwd` picks the wrong profile, use
+   `sudo chwd -i nvidia-dkms-580xx` (or `nvidia-open-dkms`). Turing is
+   supported by both.
 
 ## Phase 3 — Gaming VM software
 
@@ -108,7 +171,7 @@ If vfio is not already bound to the GPU, do the full host setup:
 
 - Log into Steam, enable Big Picture, and add the game disk as a library folder.
 - Run EmulationStation-DE once and point it at the ROM directory.
-- Open the Sunshine web UI (`https://192.168.0.108:47990`), set credentials,
+- Open the Sunshine web UI (`https://192.168.0.111:47990`), set credentials,
   and pair Moonlight.
 
 ### Ansible-managed
@@ -121,8 +184,8 @@ Packages (pacman / AUR via `paru`):
 - `sunshine`
 - `cifs-utils` only if ROMs stay on the NAS
 
-NVIDIA is installed by the CachyOS installer. The role only verifies
-`nvidia-smi`; it does not manage DKMS.
+NVIDIA is installed after passthrough with `sudo chwd -a`. The role only
+verifies `nvidia-smi`; it does not manage DKMS.
 
 Sunshine config (`~/.config/sunshine/sunshine.conf`):
 
@@ -206,7 +269,7 @@ Inventory:
 
 ```ini
 [gaming]
-192.168.0.108 ansible_user=tim ansible_become=true
+192.168.0.111 ansible_user=tim ansible_become=true
 ```
 
 Playbook:
@@ -225,10 +288,13 @@ In the same change that moves the GPU, remove the NVIDIA tasks and the Jellyfin
 `runtime: nvidia` from the mediaserver role. Do not remove them before the move,
 or the current mediaserver breaks.
 
-## Phase 6 — Client (CachyOS mini PC)
+## Phase 6 — Client (living-room mini PC)
 
+- CachyOS is fine if the client already runs it. If installing fresh and you
+  want appliance-like behavior, Bazzite or ChimeraOS is simpler; the client only
+  needs Moonlight and a Jellyfin client.
 - Install **Moonlight** and pair it with the gaming VM using the PIN from
-  `https://192.168.0.108:47990`.
+  `https://192.168.0.111:47990`.
 - Apps: Steam Big Picture, EmulationStation, Desktop.
 - Install a native Jellyfin client (Jellyfin Media Player or a browser) and
   point it at `http://192.168.0.16:8096`.
@@ -240,8 +306,9 @@ or the current mediaserver breaks.
 If the gaming VM does not work out:
 
 1. Shut down the gaming VM.
-2. Remove its `hostpci0`.
-3. Add the GPU back to the mediaserver VM.
+2. Remove its `hostpci0`: `qm set 200 --delete hostpci0`
+3. Add the GPU back to the mediaserver VM:
+   `qm set 108 --hostpci0 0000:09:00`
 4. Restore the NVIDIA tasks and Jellyfin `runtime: nvidia` in the mediaserver
    role, or re-run the previous commit.
 5. Start the mediaserver and verify `nvidia-smi` and Jellyfin hardware
@@ -250,7 +317,7 @@ If the gaming VM does not work out:
 ## Acceptance checklist
 
 - [ ] `nvidia-smi` works in the gaming VM
-- [ ] Sunshine UI reachable at `https://192.168.0.108:47990`
+- [ ] Sunshine UI reachable at `https://192.168.0.111:47990`
 - [ ] Moonlight pairs successfully
 - [ ] Steam Big Picture streams at 1080p60
 - [ ] Audio plays in the stream
@@ -262,11 +329,12 @@ If the gaming VM does not work out:
 
 ## Open items
 
-- Confirm the GPU model and IOMMU group.
-- Confirm `192.168.0.108` is free.
-- Decide the Steam library disk size.
+- Confirm `192.168.0.111` is free.
+- Confirm 500 GB is enough for the game library.
 - Decide whether ROMs are local or on the NAS.
-- Confirm the client machine (`.204`?) and that it is wired.
+- Confirm the client machine and that it is wired.
+- Confirm the client OS choice (CachyOS vs Bazzite/ChimeraOS).
+- Decide whether to add RAM before raising the gaming VM above 12 GB.
 - Accept that 4K Jellyfin transcodes are out of scope for now.
 
 ## Ports (reference)
