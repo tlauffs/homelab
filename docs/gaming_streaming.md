@@ -15,8 +15,8 @@ living-room mini PC, using Sunshine + Moonlight.
 - Plain `steam -gamepadui`; gamescope is a fallback, not the default.
 - Ansible manages packages and config files. Proxmox setup, OS install, Steam
   login, and first-run app setup stay manual in this doc.
-- Hostname `gaming`, IP `192.168.0.111`. `.108` is free but collides mentally
-  with VMID 108 (media).
+- Hostname `gaming`, IP `192.168.0.79` (current DHCP lease; pin it with a DHCP
+  reservation or a static config in CachyOS).
 - GPU is an RTX 2070 (8 GB, Turing/NVENC), IOMMU group 15, currently passed
   through as `0000:09:00`.
 
@@ -29,7 +29,7 @@ Planned. There is no `gaming` role, inventory group, or playbook entry yet.
 ```
 Proxmox host (headless; GPU already passed through to a VM)
   └── mediaserver VM (192.168.0.16) — GPU removed, Jellyfin on CPU transcode
-  └── gaming VM (192.168.0.111, CachyOS) — NVIDIA RTX 2070 via VFIO
+  └── gaming VM (192.168.0.79, CachyOS) — NVIDIA RTX 2070 via VFIO
         ├── Sunshine (host) + NVIDIA NVENC encode
         ├── KDE Plasma (autologin, X11 first, the streamed desktop)
         ├── Steam Big Picture (`steam -gamepadui`)
@@ -102,7 +102,7 @@ The Proxmox host is `192.168.0.204`. `local-lvm` is the 1 TB NVMe; `tank` is a
    - CPU: type **host**, 6 cores
    - Memory: **12 GB**, **disable ballooning**. The host has 31 GB and the
      mediaserver uses 8 GB; raise this only after checking swap.
-   - Network: VirtIO, bridge `vmbr0`, IP `192.168.0.111/24`, gateway
+   - Network: VirtIO, bridge `vmbr0`, IP `192.168.0.79/24`, gateway
      `192.168.0.1`
    - Display: **std VGA** for install
    - Disks: 80 GB OS disk on `local-lvm` + 500 GB game disk on `local-lvm`
@@ -140,7 +140,7 @@ The Proxmox host is `192.168.0.204`. `local-lvm` is the 1 TB NVMe; `tank` is a
    - Set the static IP with `nmcli` or a DHCP reservation.
    - Enable autologin for `tim`, pick the **Plasma (X11)** session, and disable
      screen lock/display sleep.
-   - Add the SSH key: `ssh-copy-id tim@192.168.0.111`.
+   - Add the SSH key: `ssh-copy-id tim@192.168.0.79`.
    - Install the guest agent: `sudo pacman -S --needed qemu-guest-agent` and
      `sudo systemctl enable --now qemu-guest-agent`.
 4. Remove the ISO and boot from disk:
@@ -171,7 +171,7 @@ The Proxmox host is `192.168.0.204`. `local-lvm` is the 1 TB NVMe; `tank` is a
 
 - Log into Steam, enable Big Picture, and add the game disk as a library folder.
 - Run EmulationStation-DE once and point it at the ROM directory.
-- Open the Sunshine web UI (`https://192.168.0.111:47990`), set credentials,
+- Open the Sunshine web UI (`https://192.168.0.79:47990`), set credentials,
   and pair Moonlight.
 
 ### Ansible-managed
@@ -269,7 +269,7 @@ Inventory:
 
 ```ini
 [gaming]
-192.168.0.111 ansible_user=tim ansible_become=true
+192.168.0.79 ansible_user=tim ansible_become=true
 ```
 
 Playbook:
@@ -294,7 +294,7 @@ or the current mediaserver breaks.
   want appliance-like behavior, Bazzite or ChimeraOS is simpler; the client only
   needs Moonlight and a Jellyfin client.
 - Install **Moonlight** and pair it with the gaming VM using the PIN from
-  `https://192.168.0.111:47990`.
+  `https://192.168.0.79:47990`.
 - Apps: Steam Big Picture, EmulationStation, Desktop.
 - Install a native Jellyfin client (Jellyfin Media Player or a browser) and
   point it at `http://192.168.0.16:8096`.
@@ -317,7 +317,7 @@ If the gaming VM does not work out:
 ## Acceptance checklist
 
 - [ ] `nvidia-smi` works in the gaming VM
-- [ ] Sunshine UI reachable at `https://192.168.0.111:47990`
+- [ ] Sunshine UI reachable at `https://192.168.0.79:47990`
 - [ ] Moonlight pairs successfully
 - [ ] Steam Big Picture streams at 1080p60
 - [ ] Audio plays in the stream
@@ -329,7 +329,7 @@ If the gaming VM does not work out:
 
 ## Open items
 
-- Confirm `192.168.0.111` is free.
+- Confirm `192.168.0.79` is reserved or statically configured.
 - Confirm 500 GB is enough for the game library.
 - Decide whether ROMs are local or on the NAS.
 - Confirm the client machine and that it is wired.
