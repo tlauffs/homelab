@@ -23,6 +23,8 @@ and ES-DE first-run setup are still to do.
 - Ansible owns packages, guest agent, autologin, firewall, Sunshine install and
   capability, and formatting and mounting the game disk. Proxmox setup, OS
   install, Steam login and first-run app setup stay manual in this doc.
+- ROMs live on the game disk at `/mnt/games/ROMs`, reached through a `~/ROMs`
+  symlink so ES-DE's own config never has to be templated.
 - Hostname `gaming` (VM 200), IP `192.168.0.79`.
 - GPU: RTX 2070 (8 GB, Turing/NVENC), IOMMU group 15, currently `0000:09:00`.
 
@@ -243,17 +245,45 @@ the autologin file to the matching config directory.
 | Ansible | Manual |
 | --- | --- |
 | Packages, guest agent, autologin (Wayland) | Proxmox VM and GPU passthrough |
-| ufw, disk format, fstab mount by UUID | CachyOS install |
-| Sunshine native package, capability, config, app entries, autostart, ES-DE AppImage | Steam login, ES-DE first run, BIOS/ROMs, Sunshine credentials/pairing, NPM proxy |
+| ufw, disk format, fstab mount by UUID, ROM directory tree | CachyOS install |
+| Sunshine native package, capability, config, app entries, autostart, ES-DE AppImage | Steam login, ES-DE first run, BIOS files, ROM content (rsync), Sunshine credentials/pairing, NPM proxy |
 
 `setup.yml` formats `/dev/sdb` only if it has no filesystem yet, then mounts it
 by UUID at `/mnt/games`. An existing filesystem with data is never overwritten.
 
+It also creates `/mnt/games/ROMs` with one directory per supported system and
+links `~/ROMs` to it. ES-DE takes the system from the directory name and ignores
+game files anywhere else, so games have to land in the matching folder:
+
+```text
+nes  snes  n64  gb  gbc  gba  nds  megadrive  mastersystem  gamegear
+sg-1000  psx  ps2  gc  wii  psp  dreamcast
+```
+
+Copy games over SSH, keeping the layout, and run it as `homelab_user` so the
+files keep the right ownership:
+
+```bash
+rsync -av --dry-run ~/roms/ tim@192.168.0.79:/mnt/games/ROMs/
+rsync -av ~/roms/ tim@192.168.0.79:/mnt/games/ROMs/
+```
+
+Then use **Utilities → Rescan ROM directory** in ES-DE, or restart it. Systems
+with no game files stay hidden, so the menu grows as the library does.
+
+Store disc games compressed rather than as 1:1 images: `chdman createcd` (PS1,
+Dreamcast) or `createdvd` (PS2) to `.chd`, Dolphin's `.rvz` for GameCube and
+Wii, `.cso` for PSP. Use `.m3u` playlists for multi-disc PS1 games so one game
+is one entry. Prefer NTSC/USA per system where the choice exists, because PAL
+titles ran at 50 Hz — the exception is disc games already owned in PAL, and
+nearly every PAL GameCube title has a 60 Hz option in its boot prompt.
+
 Packages from the official repos: `steam`, `retroarch` plus cores
 (`libretro-snes9x`, `libretro-mupen64plus-next`, `libretro-mgba`,
-`libretro-genesis-plus-gx`, `libretro-nestopia`, `libretro-beetle-psx`,
-`libretro-beetle-psx-hw`), `dolphin-emu`, `ppsspp`, `flatpak`,
-`qemu-guest-agent`, `fuse2`, and `cifs-utils` only if ROMs stay on the NAS. The
+`libretro-melonds`, `libretro-genesis-plus-gx`, `libretro-flycast`,
+`libretro-nestopia`, `libretro-beetle-psx`, `libretro-beetle-psx-hw`),
+`dolphin-emu`, `ppsspp`, `flatpak`, `qemu-guest-agent`, `fuse2`, and
+`cifs-utils` only if ROMs stay on the NAS. The
 role verifies `nvidia-smi` but does not manage DKMS.
 
 Sunshine, EmulationStation-DE, and PCSX2 are not in the official Arch repos. Use
@@ -269,11 +299,32 @@ upstream packages instead of the AUR:
 - PCSX2: the official Flathub Flatpak (`net.pcsx2.PCSX2`). ES-DE detects it
   automatically; no Sunshine app entry is needed.
 
+ES-DE's bundled defaults do not always match what is installed here, and it picks
+a system from the folder name before it ever looks at the file. Map the
+mismatches once via **Main Menu → Alternative Emulators**:
+
+| System | ES-DE default | Select instead |
+| --- | --- | --- |
+| gc, wii | Dolphin (libretro core) | Dolphin (Standalone) |
+| nds | melonDS DS | melonDS |
+| nes | Mesen | Nestopia UE |
+| gb, gbc | Gambatte | mGBA |
+| psp | PPSSPP (core) | PPSSPP (Standalone) |
+| ps2 | PCEE2 | PCSX2 (Standalone) |
+
+`snes`, `megadrive`, `mastersystem`, `gamegear`, `sg-1000`, `n64`, `gba`, `psx`
+and `dreamcast` work with the installed cores as shipped, so they need no
+mapping at all. For DS, set the melonDS core option screen layout to
+top/bottom and turn on integer scaling in RetroArch; the touch layer is unused
+by most of the library, including Pokémon.
+
 PS1 and PS2 need BIOS files, and PSP firmware is optional. Put the PS1 BIOS in
 `~/.config/retroarch/system`; PCSX2's Flatpak config and BIOS directory is
-`~/.var/app/net.pcsx2.PCSX2/config/PCSX2`. GameCube/Wii games run through
-Dolphin; some Wii games need the Wii system menu. BIOS, ROMs, and controller
-mappings stay manual.
+`~/.var/app/net.pcsx2.PCSX2/config/PCSX2`. Dreamcast and DS need no dump:
+Flycast's HLE BIOS and melonDS's free BIOS are enough for game playback.
+GameCube and Wii games run through Dolphin, and Wii games boot without a system
+menu — only the menu itself needs one. BIOS, ROMs, and controller mappings stay
+manual.
 
 The role installs Sunshine and starts it at login. Sunshine uses KMS capture and
 auto-detects NVENC on the passed-through card. Ports 47984, 47989, 47990,

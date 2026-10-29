@@ -23,6 +23,8 @@
       - libretro-snes9x
       - libretro-mupen64plus-next
       - libretro-mgba
+      - libretro-melonds
+      - libretro-flycast
       - libretro-genesis-plus-gx
       - libretro-nestopia
       - libretro-beetle-psx
@@ -93,6 +95,51 @@
     owner: "{{ homelab_user }}"
     group: "{{ homelab_user }}"
     mode: '0755'
+
+- name: Create the ROM directory
+  file:
+    path: /mnt/games/ROMs
+    state: directory
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0755'
+
+# One directory per system, because ES-DE identifies a system by the folder
+# name and ignores ROM files stored anywhere else.
+- name: Create the emulated system directories
+  file:
+    path: "/mnt/games/ROMs/{{ item }}"
+    state: directory
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    mode: '0755'
+  loop:
+    - nes
+    - snes
+    - n64
+    - gb
+    - gbc
+    - gba
+    - nds
+    - megadrive
+    - mastersystem
+    - gamegear
+    - sg-1000
+    - psx
+    - ps2
+    - gc
+    - wii
+    - psp
+    - dreamcast
+
+# ES-DE's ROM directory is fixed at ~/ROMs, so linking it to the game disk
+# avoids templating es_settings.xml, which ES-DE rewrites itself.
+- name: Link the ES-DE ROM directory to the game disk
+  file:
+    src: /mnt/games/ROMs
+    dest: "/home/{{ homelab_user }}/ROMs"
+    state: link
+    force: no
 
 - name: Create the ES-DE install directory
   file:
