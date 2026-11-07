@@ -55,6 +55,36 @@
     group: "{{ homelab_user }}"
     mode: '0755'
 
+- name: Check for legacy Jellyseerr container
+  community.docker.docker_container_info:
+    name: jellyseerr
+  register: jellyseerr_container
+
+- name: Stop legacy Jellyseerr container
+  community.docker.docker_container:
+    name: jellyseerr
+    state: stopped
+  when: jellyseerr_container.exists
+
+- name: Check for legacy Jellyseerr config
+  stat:
+    path: "{{ docker_config_directory }}/jellyseerr"
+  register: jellyseerr_config
+
+- name: Migrate Jellyseerr config to Seerr
+  command:
+    cmd: cp -a "{{ docker_config_directory }}/jellyseerr" "{{ docker_config_directory }}/seerr"
+    creates: "{{ docker_config_directory }}/seerr"
+  when: jellyseerr_config.stat.exists
+
+- name: Ensure Seerr config directory exists
+  file:
+    path: "{{ docker_config_directory }}/seerr"
+    state: directory
+    owner: "{{ homelab_user }}"
+    group: "{{ homelab_user }}"
+    recurse: yes
+
 - name: Upload docker-compose.yml template
   template:
     src: docker-compose.yml.j2

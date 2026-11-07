@@ -26,13 +26,13 @@
     group: 1000
     mode: '0644'
 
-# - name: Copy assets folder
-#   copy:
-#     src: ../templates/assets
-#     dest: /docker
-#     owner: 1000
-#     group: 1000
-#     mode: '0755'
+- name: Copy assets folder
+  copy:
+    src: ../templates/assets
+    dest: /docker
+    owner: 1000
+    group: 1000
+    mode: '0755'
 
 - name: Copy .env file
   copy:

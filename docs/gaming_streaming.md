@@ -43,7 +43,7 @@ Proxmox host 192.168.0.204 (headless, single GPU)
 Client (living-room mini PC, wired Ethernet)
   ├── Moonlight → gaming VM
   ├── Jellyfin Media Player → https://jellyfin.tlauffs.com
-  └── Jellyseerr (browser) → https://jellyseerr.tlauffs.com
+  └── Seerr (browser, formerly Jellyseerr) → https://jellyseerr.tlauffs.com
 ```
 
 Jellyfin is not a Sunshine app; playing it natively avoids a second encode.
@@ -369,11 +369,13 @@ git history if you need to roll back.
 - Apps: Steam Big Picture, EmulationStation, Desktop.
 - Install **Jellyfin Media Player** and point it at
   `https://jellyfin.tlauffs.com`. Play Jellyfin natively, not through Sunshine.
-- Jellyseerr is a request UI, not a player. Use `https://jellyseerr.tlauffs.com`
-  in a browser; a phone is the most convenient place for requests. If it should
-  be on the TV, add a browser shortcut but expect it to be less remote-friendly
-  than Jellyfin.
-- Put Moonlight, Jellyfin, and a Jellyseerr browser shortcut in the app grid or
+- Seerr (formerly Jellyseerr) is a request UI, not a player. Use
+  `https://jellyseerr.tlauffs.com` in a browser; a phone is the most convenient
+  place for requests. The NPM proxy host can be renamed to
+  `seerr.tlauffs.com` later; it still targets port 5055. If it should be on the
+  TV, add a browser shortcut but expect it to be less remote-friendly than
+  Jellyfin.
+- Put Moonlight, Jellyfin, and a Seerr browser shortcut in the app grid or
   desktop. Decide the boot target:
   - Gaming-first: autostart Moonlight fullscreen, then exit it for Jellyfin.
   - Mixed use: boot to the desktop/app grid instead, so Moonlight and Jellyfin
